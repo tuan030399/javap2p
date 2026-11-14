@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>J2meJS Launcher</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #0d1017;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2.5px solid rgba(245, 158, 11, 0.22);
+      border-top-color: #f59e0b;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    #status {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    #sub {
+      font-size: 11px;
+      color: #94a3b8;
+      max-width: 220px;
+    }
+  </style>
+  <script src="libs/encoding.js"></script>
+  <script src="bld/native.js"></script>
+  <script src="config/default.js"></script>
+  <script src="config/runtests.js"></script>
+  <script src="config/build.js"></script>
+  <script>var loadingMIDletPromises = [];</script>
+  <script src="bld/j2me.js"></script>
+  <script src="bld/main-all.js"></script>
+</head>
+<body>
+  <div class="spinner" id="spinner"></div>
+  <div id="status">Đang nạp máy ảo J2meJS...</div>
+  <div id="sub">Chuẩn bị giải nén gói MIDlet</div>
+
+  <script>
+    (function () {
+      var launched = false;
+      var statusEl = document.getElementById("status");
+      var subEl = document.getElementById("sub");
+      var spinnerEl = document.getElementById("spinner");
+
+      function notifyParent(payload) {
+        try {
+          window.parent.postMessage(payload, "*");
+        } catch (e) {}
+      }
+
+      function fail(title, msg) {
+        statusEl.textContent = title;
+        statusEl.style.color = "#fbbf24";
+        subEl.textContent = msg;
+        spinnerEl.style.display = "none";
+        notifyParent({ type: "vm-status", status: "error", message: title + ": " + msg });
+      }
+
+      async function handleLaunch(data) {
+        if (launched) return;
+        launched = true;
+        try {
+          statusEl.textContent = "Đang cài đặt .JAR...";
+          subEl.textContent = data.fileName || "game.jar";
+          notifyParent({ type: "vm-status", status: "loading", message: "Đang giải nén " + (data.fileName || "game.jar") + " vào J2meJS..." });
+
+          var jadText = "";
+          if (data.extraProperties && typeof data.extraProperties === "object") {
+            jadText = Object.keys(data.extraProperties)
+              .map(function (k) { return k + ": " + data.extraProperties[k]; })
+              .join("\r\n");
+          }
+
+          var jarKey = (data.fileName || "game.jar") + "_" + Date.now();
+          await JARStore.installJAR(jarKey, data.buffer, jadText || null);
+
+          var w = data.width || 240;
+          var h = data.height || 320;
+          var engineParam = data.engineMode === "standard" ? "enginemode2-classes.jar" : "enginemode1-classesold.jar";
+          var targetUrl =
+            "/j2mejs/main.html?localjar=" +
+            encodeURIComponent(jarKey) +
+            "&canvasSize=size-" + w + "x" + h +
+            "&enginemode=" + engineParam +
+            "&gamepad=0&gamepadSize=gamepad-0" +
+            "&muted=" + (data.muted ? "1" : "0");
+
+          window.location.replace(targetUrl);
+        } catch (err) {
+          console.error("J2meJS launcher error:", err);
+          fail("Không thể nạp tệp .JAR", err && err.message ? err.message : String(err));
+        }
+      }
+
+      window.addEventListener("message", function (e) {
+        var d = e.data;
+        if (d && d.type === "launch") {
+          handleLaunch(d);
+        }
+      });
+
+      notifyParent({ type: "ready" });
+      var timer = setInterval(function () {
+        if (launched) {
+          clearInterval(timer);
+          return;
+        }
+        notifyParent({ type: "ready" });
+      }, 250);
+    })();
+  </script>
+</body>
+</html>

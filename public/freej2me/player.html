@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreeJ2ME Runtime</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #080a0e;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    #screen-area {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+    #display {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      outline: none;
+      display: block;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      text-align: center;
+      background: #0d1017;
+      gap: 10px;
+    }
+    .spinner {
+      width: 26px;
+      height: 26px;
+      border: 2.5px solid rgba(245, 158, 11, 0.22);
+      border-top-color: #f59e0b;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    #loading-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      line-height: 1.4;
+    }
+    #loading-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.45;
+      max-width: 220px;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div id="screen-area">
+    <canvas id="display" tabindex="0" style="display: none;"></canvas>
+    <div id="loading">
+      <div class="spinner" id="spinner"></div>
+      <div id="loading-title">Đang khởi tạo máy ảo FreeJ2ME...</div>
+      <div id="loading-sub">Đang nạp WebAssembly JVM (CheerpJ)</div>
+    </div>
+  </div>
+
+  <script src="https://cjrtnc.leaningtech.com/20260317_2978/loader.js"></script>
+  <script type="module">
+    import { LibMedia } from "./libmedia/libmedia.js";
+    import { LibMidi, createUnlockingAudioContext } from "./libmidi/libmidi.js";
+    import { codeMap, KeyRepeatManager } from "./src/key.js";
+    import { EventQueue } from "./src/eventqueue.js";
+
+    import canvasFontNatives from "./libjs/libcanvasfont.js";
+    import canvasGraphicsNatives from "./libjs/libcanvasgraphics.js";
+    import gles2Natives from "./libjs/libgles2.js";
+    import jsReferenceNatives from "./libjs/libjsreference.js";
+    import mediaBridgeNatives from "./libjs/libmediabridge.js";
+    import midiBridgeNatives from "./libjs/libmidibridge.js";
+
+    const evtQueue = new EventQueue();
+    window.evtQueue = evtQueue;
+    const keyRepeatManager = new KeyRepeatManager();
+    const display = document.getElementById("display");
+    const loadingEl = document.getElementById("loading");
+    const loadingTitle = document.getElementById("loading-title");
+    const loadingSub = document.getElementById("loading-sub");
+    const spinner = document.getElementById("spinner");
+    const screenCtx = display.getContext("2d");
+
+    const cheerpjWebRoot = "/app" + location.pathname.replace(/\/[^/]*$/, "");
+    let scaleSet = false;
+    let launched = false;
+    let audioCtx = null;
+
+    function notifyParent(payload) {
+      try {
+        window.parent.postMessage(payload, "*");
+      } catch {
+        // ignore
+      }
+    }
+
+    function setStatus(title, sub, status = "loading") {
+      loadingTitle.textContent = title;
+      loadingSub.textContent = sub || "";
+      if (status === "error") {
+        spinner.style.display = "none";
+        loadingTitle.style.color = "#fbbf24";
+      }
+      notifyParent({ type: "vm-status", status, message: sub ? `${title}: ${sub}` : title });
+    }
+
+    function toCanvasCoords(clientX, clientY) {
+      const rect = display.getBoundingClientRect();
+      if (!rect.width || !rect.height) return { x: 0, y: 0 };
+      return {
+        x: Math.floor(((clientX - rect.left) * display.width) / rect.width),
+        y: Math.floor(((clientY - rect.top) * display.height) / rect.height),
+      };
+    }
+
+    function setupInputListeners() {
+      let mouseDown = false;
+      let noMouse = false;
+
+      keyRepeatManager.register((kind, key, args) => {
+        if (codeMap[key]) {
+          evtQueue.queueEvent({
+            kind: kind === "up" ? "keyup" : "keydown",
+            args: [codeMap[key], args.symbol || "\x00", !!args.ctrlKey, !!args.shiftKey],
+          });
+        }
+      });
+
+      function handleDomKey(e) {
+        if (codeMap[e.code]) {
+          keyRepeatManager.post(e.type === "keydown", e.code, {
+            symbol: e.key && e.key.length === 1 ? e.key : "\x00",
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+          });
+          e.preventDefault();
+        }
+      }
+
+      display.addEventListener("keydown", handleDomKey);
+      display.addEventListener("keyup", handleDomKey);
+
+      display.addEventListener("mousedown", (e) => {
+        display.focus();
+        if (audioCtx && audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
+        if (noMouse) return;
+        const pt = toCanvasCoords(e.clientX, e.clientY);
+        evtQueue.queueEvent({ kind: "pointerpressed", x: pt.x, y: pt.y });
+        mouseDown = true;
+        e.preventDefault();
+      });
+
+      display.addEventListener("mousemove", (e) => {
+        if (noMouse || !mouseDown) return;
+        const pt = toCanvasCoords(e.clientX, e.clientY);
+        evtQueue.queueEvent({ kind: "pointerdragged", x: pt.x, y: pt.y });
+        e.preventDefault();
+      });
+
+      document.addEventListener("mouseup", (e) => {
+        if (noMouse || !mouseDown) return;
+        mouseDown = false;
+        const pt = toCanvasCoords(e.clientX, e.clientY);
+        evtQueue.queueEvent({ kind: "pointerreleased", x: pt.x, y: pt.y });
+        e.preventDefault();
+      });
+
+      display.addEventListener("touchstart", (e) => {
+        display.focus();
+        if (audioCtx && audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
+        noMouse = true;
+        const t = e.changedTouches[0];
+        if (t) {
+          const pt = toCanvasCoords(t.clientX, t.clientY);
+          evtQueue.queueEvent({ kind: "pointerpressed", x: pt.x, y: pt.y });
+        }
+        e.preventDefault();
+      }, { passive: false });
+
+      display.addEventListener("touchmove", (e) => {
+        noMouse = true;
+        const t = e.changedTouches[0];
+        if (t) {
+          const pt = toCanvasCoords(t.clientX, t.clientY);
+          evtQueue.queueEvent({ kind: "pointerdragged", x: pt.x, y: pt.y });
+        }
+        e.preventDefault();
+      }, { passive: false });
+
+      display.addEventListener("touchend", (e) => {
+        noMouse = true;
+        const t = e.changedTouches[0];
+        if (t) {
+          const pt = toCanvasCoords(t.clientX, t.clientY);
+          evtQueue.queueEvent({ kind: "pointerreleased", x: pt.x, y: pt.y });
+        }
+        e.preventDefault();
+      });
+    }
+
+    async function kvToJava(lib, obj) {
+      const HashMap = await lib.java.util.HashMap;
+      const map = await new HashMap();
+      if (obj) {
+        for (const [k, v] of Object.entries(obj)) {
+          if (v !== undefined && v !== null) {
+            await map.put(String(k), String(v));
+          }
+        }
+      }
+      return map;
+    }
+
+    async function launchJarPayload(payload) {
+      if (launched) return;
+      launched = true;
+      try {
+        setupInputListeners();
+        setStatus("Đang khởi tạo đồ họa...", "Chuẩn bị Canvas 2D / WebGL2 & WebAudio");
+
+        // Do not block JVM boot if AudioWorklet stays suspended inside an iframe
+        try {
+          audioCtx = createUnlockingAudioContext();
+          window.libmidi = new LibMidi(audioCtx);
+          await Promise.race([
+            window.libmidi.init(),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+          ]);
+          if (window.libmidi.initialized && window.libmidi.midiPlayer) {
+            window.libmidi.midiPlayer.addEventListener("end-of-media", (e) => {
+              window.evtQueue.queueEvent({ kind: "player-eom", player: e.target });
+            });
+          }
+        } catch (audioErr) {
+          console.warn("MIDI init warning:", audioErr);
+          window.libmidi = { midiPlayer: null };
+        }
+
+        window.libmedia = new LibMedia();
+
+        if (typeof cheerpjInit !== "function") {
+          setStatus(
+            "Không tải được WebAssembly JVM",
+            "Không thể kết nối máy chủ CheerpJ (cjrtnc.leaningtech.com). Vui lòng kiểm tra mạng và thử lại.",
+            "error"
+          );
+          return;
+        }
+
+        setStatus("Đang tải OpenJDK WebAssembly...", "Lần đầu mở có thể mất vài giây để tải CheerpJ");
+        await cheerpjInit({
+          enableDebug: false,
+          natives: {
+            ...canvasFontNatives,
+            ...canvasGraphicsNatives,
+            ...gles2Natives,
+            ...jsReferenceNatives,
+            ...mediaBridgeNatives,
+            ...midiBridgeNatives,
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_setTitle(lib, title) {
+              notifyParent({ type: "vm-title", title: String(title || "") });
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_setIcon() {
+              // handled by parent inspector
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_getScreenCtx() {
+              return screenCtx;
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_setCanvasSize(lib, width, height) {
+              screenCtx.canvas.width = width;
+              screenCtx.canvas.height = height;
+              if (!scaleSet) {
+                scaleSet = true;
+                loadingEl.style.display = "none";
+                display.style.display = "block";
+                notifyParent({ type: "vm-status", status: "running", message: `Đang chạy FreeJ2ME (${width}×${height})` });
+              }
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_waitForAndDispatchEvents(lib, listener) {
+              const KeyEvent = await lib.pl.zb3.freej2me.bridge.shell.KeyEvent;
+              const PointerEvent = await lib.pl.zb3.freej2me.bridge.shell.PointerEvent;
+              const evt = await evtQueue.waitForEvent();
+              if (evt.kind === "keydown") {
+                await listener.keyPressed(await new KeyEvent(...evt.args));
+              } else if (evt.kind === "keyup") {
+                await listener.keyReleased(await new KeyEvent(...evt.args));
+              } else if (evt.kind === "pointerpressed") {
+                await listener.pointerPressed(await new PointerEvent(evt.x, evt.y));
+              } else if (evt.kind === "pointerdragged") {
+                await listener.pointerDragged(await new PointerEvent(evt.x, evt.y));
+              } else if (evt.kind === "pointerreleased") {
+                await listener.pointerReleased(await new PointerEvent(evt.x, evt.y));
+              } else if (evt.kind === "player-eom") {
+                await listener.playerEOM(evt.player);
+              } else if (evt.kind === "player-video-frame") {
+                await listener.playerVideoFrame(evt.player);
+              }
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_restart() {
+              notifyParent({ type: "vm-restart" });
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_exit() {
+              setStatus("MIDlet đã thoát", "Bấm nút Chơi lại ở phía trên để khởi động lại.", "error");
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_sthop() {},
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_say(lib, msg) {
+              notifyParent({ type: "vm-log", message: String(msg || "") });
+            },
+            async Java_pl_zb3_freej2me_bridge_shell_Shell_sayObject() {},
+          },
+        });
+
+        setStatus("Đang nạp lõi FreeJ2ME...", payload.fileName || "game.jar");
+        const lib = await cheerpjRunLibrary(cheerpjWebRoot + "/freej2me-web.jar");
+        const launcherUtil = await lib.pl.zb3.freej2me.launcher.LauncherUtil;
+        const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
+        const FreeJ2ME = await lib.org.recompile.freej2me.FreeJ2ME;
+        const File = await lib.java.io.File;
+
+        await launcherUtil.resetTmpDir();
+        const tmpJarPath = "/files/_tmp/current.jar";
+        const jarFile = await new File(tmpJarPath);
+        await launcherUtil.copyJar(new Int8Array(payload.buffer), jarFile);
+
+        const loader = await MIDletLoader.getMIDletLoader(jarFile);
+        if (!loader) {
+          setStatus("Không thể đọc tệp .JAR", "Tệp không đúng định dạng JAR hợp lệ.", "error");
+          return;
+        }
+        await launcherUtil.ensureAppId(loader, payload.fileName || "game.jar");
+        const preAppId = await loader.getAppId();
+        if (preAppId) {
+          try {
+            const existing = await cjFileBlob("/files/" + preAppId + "/app.jar");
+            if (existing) {
+              await launcherUtil.uninstallApp(preAppId);
+            }
+          } catch {
+            // ignore if not previously installed
+          }
+        }
+
+        const settingsObj = {
+          width: String(payload.width || 240),
+          height: String(payload.height || 320),
+          sound: payload.muted ? "off" : "on",
+          phone: payload.phone || "Nokia",
+          rotate: "off",
+          fps: "0",
+          fontSize: "0",
+          dgFormat: "4444",
+          forceFullscreen: "off",
+          queuedPaint: "off",
+          textureDisableFilter: "off",
+        };
+        const midlet1 = payload.extraProperties?.["MIDlet-1"] || payload.extraProperties?.["midlet-1"];
+        if (midlet1) {
+          const parts = String(midlet1).split(",").map((s) => s.trim());
+          if (parts[2]) settingsObj.main = parts[2];
+        }
+        const jsettings = await kvToJava(lib, settingsObj);
+        const jappProps = await kvToJava(lib, payload.extraProperties || {});
+        const jsysProps = await kvToJava(lib, {});
+
+        await launcherUtil.initApp(jarFile, loader, jsettings, jappProps, jsysProps);
+        const appId = await loader.getAppId();
+        await loader.close();
+
+        setStatus("Đang khởi chạy MIDlet...", payload.fileName || appId);
+        FreeJ2ME.main(["app", appId]).catch((err) => {
+          console.error("FreeJ2ME crash:", err);
+          setStatus(
+            "Không thể chạy tệp .JAR này",
+            "Có thể đây là tệp Java PC (Java SE) hoặc tệp bị thiếu lớp MIDlet.",
+            "error"
+          );
+        });
+      } catch (err) {
+        console.error("FreeJ2ME init error:", err);
+        setStatus("Lỗi khởi chạy giả lập FreeJ2ME", err?.message || String(err), "error");
+      }
+    }
+
+    let readyTimer = null;
+
+    window.addEventListener("message", (e) => {
+      const data = e.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "launch") {
+        if (readyTimer) {
+          clearInterval(readyTimer);
+          readyTimer = null;
+        }
+        launchJarPayload(data);
+      } else if (data.type === "mute") {
+        try {
+          if (window.libmidi?.midiPlayer) {
+            window.libmidi.midiPlayer.volume = data.muted ? 0 : 100;
+          }
+        } catch {
+          // ignore
+        }
+      } else if (data.type === "key") {
+        if (audioCtx && audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
+        keyRepeatManager.post(!!data.down, data.code, {
+          symbol: data.symbol || "\x00",
+          ctrlKey: false,
+          shiftKey: false,
+        });
+      }
+    });
+
+    notifyParent({ type: "ready" });
+    readyTimer = setInterval(() => {
+      if (launched) {
+        clearInterval(readyTimer);
+        readyTimer = null;
+        return;
+      }
+      notifyParent({ type: "ready" });
+    }, 350);
+  </script>
+</body>
+</html>

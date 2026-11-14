@@ -1,0 +1,6 @@
+{
+  "name": "JavaDeck — Trình Giả Lập Game Java J2ME",
+  "description": "Giao diện web chơi game Java J2ME (.JAR/.JAD) với bộ phím điều hướng D-Pad, bàn phím số T9 và trình tải game trực tiếp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
