@@ -6767,15 +6767,17 @@ if (typeof module !== "undefined" && module.exports) {
     sendRotationEvent();
   });
   function getEventPoint(event) {
-  
+    var rect = deviceCanvas.getBoundingClientRect();
     var item = event.touches && event.touches[0] || event.changedTouches && event.changedTouches[0] || event; 
-    var ret = {x:item.pageX - (canvasRect.left | 0), y:item.pageY - (canvasRect.top | 0)}; 
-    if(gamesca!=1){ 
-      //兼容缩放后的触摸操作 
-      ret.x=parseInt(ret.x/gamesca);
-      ret.y=parseInt(ret.y/gamesca);    
-     } 
-    return ret;
+    var clientX = item.clientX !== undefined ? item.clientX : (item.pageX - (window.pageXOffset || 0));
+    var clientY = item.clientY !== undefined ? item.clientY : (item.pageY - (window.pageYOffset || 0));
+    var relX = clientX - rect.left;
+    var relY = clientY - rect.top;
+    var scaleX = (deviceCanvas.width || 1) / (rect.width || 1);
+    var scaleY = (deviceCanvas.height || 1) / (rect.height || 1);
+    var px = Math.round(Math.max(0, Math.min(deviceCanvas.width, relX * scaleX)));
+    var py = Math.round(Math.max(0, Math.min(deviceCanvas.height, relY * scaleY)));
+    return {x: px, y: py};
   }
   var LONG_PRESS_TIMEOUT = 1E3;
   var MIN_DRAG_DISTANCE_SQUARED = 5 * 5;
@@ -7477,7 +7479,7 @@ if (typeof module !== "undefined" && module.exports) {
   function getKeyboardHeight() {
     return physicalScreenHeight - window.innerHeight;
   }
-  return {isVKVisible:isVKVisible, manifest:manifest, sendCommandEvent:sendCommandEvent, sendVirtualKeyboardEvent:sendVirtualKeyboardEvent, sendEndOfMediaEvent:sendEndOfMediaEvent, sendMediaSnapshotFinishedEvent:sendMediaSnapshotFinishedEvent, sendKeyPress:sendKeyPress, sendKeyRelease:sendKeyRelease, sendDestroyMIDletEvent:sendDestroyMIDletEvent, setDestroyedForRestart:setDestroyedForRestart, registerDestroyedListener:registerDestroyedListener, sendExecuteMIDletEvent:sendExecuteMIDletEvent, deviceContext:deviceContext, 
+  return {sendPenEvent:sendPenEvent, isVKVisible:isVKVisible, manifest:manifest, sendCommandEvent:sendCommandEvent, sendVirtualKeyboardEvent:sendVirtualKeyboardEvent, sendEndOfMediaEvent:sendEndOfMediaEvent, sendMediaSnapshotFinishedEvent:sendMediaSnapshotFinishedEvent, sendKeyPress:sendKeyPress, sendKeyRelease:sendKeyRelease, sendDestroyMIDletEvent:sendDestroyMIDletEvent, setDestroyedForRestart:setDestroyedForRestart, registerDestroyedListener:registerDestroyedListener, sendExecuteMIDletEvent:sendExecuteMIDletEvent, deviceContext:deviceContext, 
   updatePhysicalScreenSize:updatePhysicalScreenSize, updateCanvas:updateCanvas, localizedStrings:localizedStrings};
 }();
 

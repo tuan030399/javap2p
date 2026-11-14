@@ -45,6 +45,7 @@
       border: 0 !important;
       outline: none !important;
       background: #000;
+      touch-action: none !important;
     }
     .screen {
       position: absolute !important;
@@ -160,6 +161,15 @@
             }
           } catch (err) {
             console.warn("Key dispatch error:", err);
+          }
+        } else if (d.type === "pointer" && typeof MIDP !== "undefined") {
+          try {
+            if (typeof MIDP.sendPenEvent === "function") {
+              var whichType = d.action === "down" ? 1 : (d.action === "up" ? 2 : 3);
+              MIDP.sendPenEvent({ x: Math.round(d.x), y: Math.round(d.y) }, whichType);
+            }
+          } catch (err) {
+            console.warn("Pointer dispatch error:", err);
           }
         } else if (d.type === "mute") {
           isMuted = !!d.muted;

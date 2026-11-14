@@ -48,6 +48,7 @@ export const RemoteControllerView: React.FC<RemoteControllerViewProps> = ({ onBa
   const [inputText, setInputText] = useState('');
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
   const [softkeys] = useState<SoftkeyLabels>({ left: 'Menu', center: 'OK', right: 'Thoát' });
+  const [touchIndicator, setTouchIndicator] = useState<{ x: number; y: number } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const heldKeysRef = useRef<Set<number>>(new Set());
@@ -58,6 +59,35 @@ export const RemoteControllerView: React.FC<RemoteControllerViewProps> = ({ onBa
     const parts = res.split('x').map(Number);
     return [parts[0] || 240, parts[1] || 320];
   }
+
+  const handleScreenPointer = (e: React.PointerEvent<HTMLDivElement>, action: 'down' | 'move' | 'up') => {
+    e.preventDefault();
+    if (action === 'down') {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const relY = e.clientY - rect.top;
+    const x = Math.max(0, Math.min(resW, (relX / (rect.width || 1)) * resW));
+    const y = Math.max(0, Math.min(resH, (relY / (rect.height || 1)) * resH));
+
+    if (action === 'down' || action === 'move') {
+      setTouchIndicator({ x: relX, y: relY });
+    } else {
+      setTouchIndicator(null);
+    }
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'pointer',
+        action,
+        x: Math.round(x),
+        y: Math.round(y),
+      }));
+    }
+  };
 
   const handleConnect = (e: React.FormEvent) => {
     e.preventDefault();
@@ -314,21 +344,37 @@ export const RemoteControllerView: React.FC<RemoteControllerViewProps> = ({ onBa
       <div className="relative flex flex-col items-center rounded-[36px] border border-white/15 bg-gradient-to-b from-[#222733] via-[#171B24] to-[#11141B] p-5 shadow-2xl w-full max-w-[390px]">
         {/* Screen Bezel */}
         <div className="w-full rounded-[18px] border border-white/10 bg-[#080A0E] p-2.5 shadow-inner flex flex-col items-center">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-[10px] text-emerald-400/90 font-medium tracking-wide">
+              👆 Cảm ứng &amp; vuốt trực tiếp trên màn hình
+            </span>
+          </div>
           <div
-            className="relative overflow-hidden rounded-[8px] bg-black border border-white/[0.06] flex items-center justify-center"
-            style={{ width: displayWidthPx, height: displayHeightPx }}
+            onPointerDown={(e) => handleScreenPointer(e, 'down')}
+            onPointerMove={(e) => e.buttons === 1 && handleScreenPointer(e, 'move')}
+            onPointerUp={(e) => handleScreenPointer(e, 'up')}
+            onPointerCancel={(e) => handleScreenPointer(e, 'up')}
+            className="relative overflow-hidden rounded-[8px] bg-black border border-white/[0.06] flex items-center justify-center cursor-crosshair select-none touch-none"
+            style={{ width: displayWidthPx, height: displayHeightPx, touchAction: 'none' }}
           >
             {frameSrc ? (
               <img
                 src={frameSrc}
                 alt="Live Game Stream"
-                className="h-full w-full object-contain image-rendering-pixelated"
+                draggable={false}
+                className="h-full w-full object-contain image-rendering-pixelated pointer-events-none select-none"
               />
             ) : (
               <div className="text-center p-4">
                 <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent mb-2" />
                 <p className="text-xs text-slate-400">Đang kết nối luồng màn hình...</p>
               </div>
+            )}
+            {touchIndicator && (
+              <div
+                className="absolute pointer-events-none -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 border-emerald-400 bg-emerald-400/30 animate-ping"
+                style={{ left: touchIndicator.x, top: touchIndicator.y }}
+              />
             )}
           </div>
 

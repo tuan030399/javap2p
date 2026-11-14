@@ -241,12 +241,18 @@ export const PhoneConsole: React.FC<PhoneConsoleProps> = ({
 
         {/* Recessed LCD Bezel */}
         <div className="w-full rounded-[18px] border border-white/10 bg-[#080A0E] p-2.5 shadow-inner flex flex-col items-center">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-[10px] text-amber-400/90 font-medium tracking-wide">
+              👆 Hỗ trợ cảm ứng &amp; vuốt trực tiếp trên màn hình
+            </span>
+          </div>
           <div
             className="relative overflow-hidden rounded-[8px] bg-black border border-white/[0.06]"
             style={{
               width: displayWidthPx,
               height: displayHeightPx,
               maxWidth: '100%',
+              touchAction: 'none',
             }}
           >
             {isJarMode ? (

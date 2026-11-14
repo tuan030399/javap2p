@@ -431,6 +431,13 @@ export default function App() {
             }
           } else if (msg.type === 'text' && typeof msg.text === 'string') {
             handleSendText(msg.text);
+          } else if (msg.type === 'pointer' && typeof msg.x === 'number' && typeof msg.y === 'number') {
+            if (activeSource.type === 'jar') {
+              emuIframeRef.current?.contentWindow?.postMessage(
+                { type: 'pointer', action: msg.action, x: msg.x, y: msg.y },
+                '*'
+              );
+            }
           }
         } catch {}
       }
