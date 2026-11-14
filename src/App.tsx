@@ -457,10 +457,10 @@ export default function App() {
             }
           },
           'image/jpeg',
-          0.6
+          0.35
         );
       }
-    }, 80);
+    }, 50);
 
     return () => {
       clearInterval(interval);

@@ -68,49 +68,65 @@ export const RemoteControllerView: React.FC<RemoteControllerViewProps> = ({ onBa
 
   useEffect(() => {
     if (!roomCode) return;
+    let isCancelled = false;
+    let timer: any = null;
 
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${location.host}/api/j2me-relay?role=controller&room=${encodeURIComponent(roomCode)}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    const connect = () => {
+      if (isCancelled) return;
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${proto}//${location.host}/api/j2me-relay?role=controller&room=${encodeURIComponent(roomCode)}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      setIsConnected(true);
-    };
-
-    ws.onmessage = (event) => {
-      if (typeof event.data === 'string') {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'host-status') {
-            setHostOnline(!!msg.connected);
-          }
-        } catch {
-          // ignore
+      ws.onopen = () => {
+        if (isCancelled) {
+          ws.close();
+          return;
         }
-      } else if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
-        const blob = event.data instanceof Blob ? event.data : new Blob([event.data], { type: 'image/jpeg' });
-        const url = URL.createObjectURL(blob);
-        setFrameSrc((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return url;
-        });
-      }
+        setIsConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        if (isCancelled) return;
+        if (typeof event.data === 'string') {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'host-status') {
+              setHostOnline(!!msg.connected);
+            }
+          } catch {}
+        } else if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+          const blob = event.data instanceof Blob ? event.data : new Blob([event.data], { type: 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          setFrameSrc((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return url;
+          });
+        }
+      };
+
+      ws.onclose = () => {
+        if (isCancelled) return;
+        setIsConnected(false);
+        setHostOnline(false);
+        timer = setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => {
+        if (isCancelled) return;
+        ws.close();
+      };
     };
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      setHostOnline(false);
-    };
-
-    ws.onerror = () => {
-      setIsConnected(false);
-      setHostOnline(false);
-    };
+    connect();
 
     return () => {
-      ws.close();
-      wsRef.current = null;
+      isCancelled = true;
+      if (timer) clearTimeout(timer);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [roomCode]);
 
