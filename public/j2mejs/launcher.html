@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
   <title>J2meJS Launcher</title>
   <style>
     html, body {
@@ -20,6 +20,8 @@
       text-align: center;
       gap: 10px;
       overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .spinner {
       width: 24px;
@@ -92,7 +94,7 @@
               .join("\r\n");
           }
 
-          var jarKey = (data.fileName || "game.jar") + "_" + Date.now();
+          var jarKey = (data.fileName || "game.jar") + "_" + (data.vmId || Date.now());
           await JARStore.installJAR(jarKey, data.buffer, jadText || null);
 
           var w = data.width || 240;
@@ -104,7 +106,8 @@
             "&canvasSize=size-" + w + "x" + h +
             "&enginemode=" + engineParam +
             "&gamepad=0&gamepadSize=gamepad-0" +
-            "&muted=" + (data.muted ? "1" : "0");
+            "&muted=" + (data.muted ? "1" : "0") +
+            (data.vmId ? "&vmId=" + encodeURIComponent(data.vmId) : "");
 
           window.location.replace(targetUrl);
         } catch (err) {

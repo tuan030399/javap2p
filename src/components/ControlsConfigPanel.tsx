@@ -41,6 +41,7 @@ const KEY_MAPPINGS: { phoneKey: string; keyboard: string; action: string }[] = [
   { phoneKey: 'Softkey Trái', keyboard: 'Q hoặc [', action: 'Menu trái / Bắt đầu / Tạm dừng' },
   { phoneKey: 'Softkey Phải', keyboard: 'E hoặc ]', action: 'Quay lại / Tùy chọn phải' },
   { phoneKey: 'Nút Tắt đỏ (End)', keyboard: 'Esc', action: 'Mở menu cấu hình nhanh FreeJ2ME' },
+  { phoneKey: 'Nút Xóa chữ (C / ⌫)', keyboard: 'Backspace', action: 'Xóa ký tự đã nhập trong khung chữ' },
   { phoneKey: 'Bàn phím số 0 – 9', keyboard: 'Phím số 0 – 9', action: 'Điều khiển T9 (2/4/6/8/5)' },
   { phoneKey: 'Phím * và #', keyboard: 'Phím * (Shift+8) hoặc # (Shift+3)', action: 'Kỹ năng phụ / Tên lửa' },
 ];

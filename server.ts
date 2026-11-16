@@ -312,6 +312,7 @@ async function startServer() {
       sendJson(ws, { type: 'host-status', connected: isHostOpen });
       if (isHostOpen && roomObj.hostWs) {
         sendJson(roomObj.hostWs, { type: 'controller-joined' });
+        sendJson(roomObj.hostWs, { type: 'controller-count', count: roomObj.controllers.size });
       }
 
       ws.on('message', (data, isBinary) => {
@@ -326,6 +327,9 @@ async function startServer() {
 
       ws.on('close', () => {
         roomObj.controllers.delete(ws);
+        if (roomObj.hostWs && roomObj.hostWs.readyState === WebSocket.OPEN) {
+          sendJson(roomObj.hostWs, { type: 'controller-count', count: roomObj.controllers.size });
+        }
       });
     } else {
       ws.close(1008, 'Invalid role');

@@ -12,14 +12,44 @@
     background-color: #111317;
     color: #f1f5f9;
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
 
   body {
     margin: 0;
-    min-height: 100vh;
+    min-height: 100dvh;
     background-color: #111317;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  button, [role="button"], canvas, iframe {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    caret-color: transparent;
+  }
+
+  input, textarea, select, [contenteditable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+    caret-color: auto;
   }
 }
 

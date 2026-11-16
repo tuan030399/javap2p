@@ -7298,7 +7298,7 @@ if (typeof module !== "undefined" && module.exports) {
   var SYSTEM_KEY_SEND = 2;
   var SYSTEM_KEY_END = 3;
   var SYSTEM_KEY_CLEAR = 4;
-  var systemKeyMap = {8:SYSTEM_KEY_CLEAR, 112:SYSTEM_KEY_POWER, 116:SYSTEM_KEY_SEND, 114:SYSTEM_KEY_END};
+  var systemKeyMap = {8:SYSTEM_KEY_CLEAR, "-8":SYSTEM_KEY_CLEAR, 112:SYSTEM_KEY_POWER, 116:SYSTEM_KEY_SEND, 114:SYSTEM_KEY_END};
   Native["javax/microedition/lcdui/KeyConverter.getSystemKey.(I)I"] = function(addr, key) {
     return systemKeyMap[key] || 0;
   };
@@ -7559,7 +7559,8 @@ Native["com/nokia/mid/ui/frameanimator/FrameAnimator.isRegistered.()Z"] = functi
 Native["com/nokia/mid/ui/frameanimator/FrameAnimator.getNumRegisteredFrameAnimators.()I"] = function(addr) {
   return FrameAnimator.numRegistered;
 };
-var RECORD_STORE_BASE = "/RecordStore";
+var _vmScope = (typeof URLSearchParams !== "undefined" ? new URLSearchParams(location.search).get("vmId") : "") || "";
+var RECORD_STORE_BASE = _vmScope ? ("/RecordStore_" + _vmScope.replace(/[^a-zA-Z0-9_-]/g, "")) : "/RecordStore";
 MIDP.fsRoots = ["MemoryCard/", "Persistent/", "Phone/", "Private/"];
 MIDP.fsRootNames = ["Memory card", "Persistent", "Phone memory", "Private"];
 Native["com/sun/midp/io/j2me/storage/File.initConfigRoot.(I)Ljava/lang/String;"] = function(addr, storageId) {
@@ -10557,7 +10558,7 @@ Native["com/nokia/mid/ui/DirectGraphicsImp.drawImage.(Ljavax/microedition/lcdui/
       var focused = screen.focusItemId != null ? items[screen.focusItemId] : null;
 
       // Backspace / Clear deletes char when TextField is focused
-      if (keyCode === 8 && focused && focused.kind === "textfield" && !(focused.constraints & 131072)) {
+      if ((keyCode === 8 || keyCode === -8) && focused && focused.kind === "textfield" && !(focused.constraints & 131072)) {
         if (focused.text.length > 0) {
           focused.text = focused.text.slice(0, -1);
           focused.caret = focused.text.length;

@@ -33,7 +33,7 @@ export type JarEngineId = 'j2mejs' | 'freej2me';
 
 export type AppMode = 'menu' | 'host' | 'controller';
 
-export type GameCategory = 'Arcade' | 'Phiêu lưu' | 'Bắn súng' | 'Giải đố' | 'Java .JAR';
+export type WorkbenchTab = 'vms' | 'jars';
 
 export interface JarManifestInfo {
   midletName: string;
@@ -69,23 +69,19 @@ export interface UploadedJarRecord {
   inspect: JarInspectResult;
 }
 
-export type BuiltinGameId = 'snake' | 'bounce' | 'space' | 'brick';
-
-export interface BuiltinGameMeta {
-  id: BuiltinGameId;
-  title: string;
-  subtitle: string;
-  category: GameCategory;
-  vendor: string;
-  version: string;
-  year: string;
-  controlsHint: string;
-  accentColor: string;
+export interface PersistedVmConfig {
+  id: string;
+  name: string;
+  roomCode: string;
+  jarId: string | null;
+  resolution: ScreenResolution;
+  filter: DisplayFilter;
+  phoneProfile: PhoneProfile;
+  jarEngine: JarEngineId;
+  isMuted: boolean;
+  isRunning: boolean;
+  createdAt: number;
 }
-
-export type ActiveGameSource =
-  | { type: 'builtin'; id: BuiltinGameId }
-  | { type: 'jar'; record: UploadedJarRecord };
 
 export interface VmRuntimeState {
   status: 'idle' | 'loading' | 'running' | 'paused' | 'halted' | 'error';
@@ -96,20 +92,13 @@ export interface VmRuntimeState {
   logs: string[];
 }
 
+export interface VmStatusSummary {
+  runtime: VmRuntimeState;
+  controllerCount: number;
+}
+
 export interface SoftkeyLabels {
   left: string;
   center: string;
   right: string;
-}
-
-export interface JavaGameEngine {
-  id: string;
-  title: string;
-  init: (width: number, height: number) => void;
-  update: (dtMs: number, heldKeys: Set<number>) => void;
-  render: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-  onKeyDown: (keyCode: number) => void;
-  onKeyUp: (keyCode: number) => void;
-  getSoftkeys: () => SoftkeyLabels;
-  getHighScore: () => number;
 }
