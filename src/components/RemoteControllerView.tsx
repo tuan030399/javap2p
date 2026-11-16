@@ -47,7 +47,7 @@ export const RemoteControllerView: React.FC<RemoteControllerViewProps> = ({ onBa
   const [showTextInput, setShowTextInput] = useState(false);
   const [inputText, setInputText] = useState('');
   const [pressedKeys, setPressedKeys] = useState<Set<number>>(new Set());
-  const [softkeys] = useState<SoftkeyLabels>({ left: 'Menu', center: 'OK', right: 'Thoát' });
+  const [softkeys, setSoftkeys] = useState<SoftkeyLabels>({ left: 'Menu', center: 'OK', right: 'Thoát' });
   const [touchIndicator, setTouchIndicator] = useState<{ x: number; y: number } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -123,6 +123,12 @@ export const RemoteControllerView: React.FC<RemoteControllerViewProps> = ({ onBa
             const msg = JSON.parse(event.data);
             if (msg.type === 'host-status') {
               setHostOnline(!!msg.connected);
+            } else if (msg.type === 'softkeys') {
+              setSoftkeys({
+                left: typeof msg.left === 'string' ? msg.left : '',
+                center: typeof msg.center === 'string' ? msg.center : '',
+                right: typeof msg.right === 'string' ? msg.right : '',
+              });
             }
           } catch {}
         } else if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {

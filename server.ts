@@ -308,7 +308,11 @@ async function startServer() {
       });
     } else if (role === 'controller') {
       roomObj.controllers.add(ws);
-      sendJson(ws, { type: 'host-status', connected: !!(roomObj.hostWs && roomObj.hostWs.readyState === WebSocket.OPEN) });
+      const isHostOpen = !!(roomObj.hostWs && roomObj.hostWs.readyState === WebSocket.OPEN);
+      sendJson(ws, { type: 'host-status', connected: isHostOpen });
+      if (isHostOpen && roomObj.hostWs) {
+        sendJson(roomObj.hostWs, { type: 'controller-joined' });
+      }
 
       ws.on('message', (data, isBinary) => {
         if (roomObj.hostWs && roomObj.hostWs.readyState === WebSocket.OPEN) {

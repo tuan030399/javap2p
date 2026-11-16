@@ -6753,11 +6753,16 @@ if (typeof module !== "undefined" && module.exports) {
     };
   }
   function sendPenEvent(pt, whichType) {
-    
+    if (window.__j2meLcdui && window.__j2meLcdui.isActive()) {
+      window.__j2meLcdui.handlePointer(pt.x, pt.y, whichType);
+      return;
+    }
     FG.sendNativeEventToForeground({type:PEN_EVENT, intParam1:whichType, intParam2:pt.x, intParam3:pt.y}, true);
   }
   function sendGestureEvent(pt, distancePt, whichType, aFloatParam1, aIntParam7, aIntParam8, aIntParam9) {
-    
+    if (window.__j2meLcdui && window.__j2meLcdui.isActive()) {
+      return;
+    }
     FG.sendNativeEventToForeground({type:GESTURE_EVENT, intParam1:whichType, intParam2:distancePt && distancePt.x || 0, intParam3:distancePt && distancePt.y || 0, intParam5:pt.x, intParam6:pt.y, floatParam1:Math.fround(aFloatParam1 || 0), intParam7:aIntParam7 || 0, intParam8:aIntParam8 || 0, intParam9:aIntParam9 || 0, intParam10:0, intParam11:0, intParam12:0, intParam13:0, intParam14:0, intParam15:0, intParam16:0}, true);
   }
   var supportsTouch = "ontouchstart" in document.documentElement;
@@ -7070,6 +7075,9 @@ if (typeof module !== "undefined" && module.exports) {
   function sendCommandEvent(id) {
     FG.sendNativeEventToForeground({type:COMMAND_EVENT, intParam1:id, intParam2:0, intParam3:0}, true);
   }
+  function sendPeerChangedEvent(modelVersion, hint, peerId, value) {
+    FG.sendNativeEventToForeground({type:8, intParam1:modelVersion || 0, intParam2:hint || 0, intParam3:peerId || 0, intParam5:value || 0}, true);
+  }
   function sendEndOfMediaEvent(pId, duration) {
     FG.sendNativeEventToForeground({type:MMAPI_EVENT, intParam1:pId, intParam2:duration, intParam3:0, intParam4:Media.EVENT_MEDIA_END_OF_MEDIA}, false);
   }
@@ -7107,11 +7115,19 @@ if (typeof module !== "undefined" && module.exports) {
   var GESTURE_RECOGNITION_END = 32768;
   var suppressKeyEvents = false;
   function sendKeyPress(keyCode) {
+    if (window.__j2meLcdui && window.__j2meLcdui.isActive()) {
+      if (window.__j2meLcdui.handleKeyPress(keyCode)) {
+        return;
+      }
+    }
     if (!suppressKeyEvents) {
       FG.sendNativeEventToForeground({type:KEY_EVENT, intParam1:PRESSED, intParam2:keyCode, intParam3:0}, true);
     }
   }
   function sendKeyRelease(keyCode) {
+    if (window.__j2meLcdui && window.__j2meLcdui.isActive()) {
+      return;
+    }
     if (!suppressKeyEvents) {
       FG.sendNativeEventToForeground({type:KEY_EVENT, intParam1:RELEASED, intParam2:keyCode, intParam3:0}, true);
     }
@@ -7479,7 +7495,7 @@ if (typeof module !== "undefined" && module.exports) {
   function getKeyboardHeight() {
     return physicalScreenHeight - window.innerHeight;
   }
-  return {sendPenEvent:sendPenEvent, isVKVisible:isVKVisible, manifest:manifest, sendCommandEvent:sendCommandEvent, sendVirtualKeyboardEvent:sendVirtualKeyboardEvent, sendEndOfMediaEvent:sendEndOfMediaEvent, sendMediaSnapshotFinishedEvent:sendMediaSnapshotFinishedEvent, sendKeyPress:sendKeyPress, sendKeyRelease:sendKeyRelease, sendDestroyMIDletEvent:sendDestroyMIDletEvent, setDestroyedForRestart:setDestroyedForRestart, registerDestroyedListener:registerDestroyedListener, sendExecuteMIDletEvent:sendExecuteMIDletEvent, deviceContext:deviceContext, 
+  return {sendPenEvent:sendPenEvent, isVKVisible:isVKVisible, manifest:manifest, sendCommandEvent:sendCommandEvent, sendPeerChangedEvent:sendPeerChangedEvent, sendVirtualKeyboardEvent:sendVirtualKeyboardEvent, sendEndOfMediaEvent:sendEndOfMediaEvent, sendMediaSnapshotFinishedEvent:sendMediaSnapshotFinishedEvent, sendKeyPress:sendKeyPress, sendKeyRelease:sendKeyRelease, sendDestroyMIDletEvent:sendDestroyMIDletEvent, setDestroyedForRestart:setDestroyedForRestart, registerDestroyedListener:registerDestroyedListener, sendExecuteMIDletEvent:sendExecuteMIDletEvent, deviceContext:deviceContext, 
   updatePhysicalScreenSize:updatePhysicalScreenSize, updateCanvas:updateCanvas, localizedStrings:localizedStrings};
 }();
 
@@ -8360,7 +8376,11 @@ var currentlyFocusedTextEditor;
     }
     var ctx = $.ctx;
     window.requestAnimationFrame(function() {
-      MIDP.deviceContext.drawImage(offscreenCanvas, x1, y1, width, height, x1, y1, width, height); 
+      if (window.__j2meLcdui && window.__j2meLcdui.isActive()) {
+        window.__j2meLcdui.render();
+      } else {
+        MIDP.deviceContext.drawImage(offscreenCanvas, x1, y1, width, height, x1, y1, width, height);
+      }
       J2ME.Scheduler.enqueue(ctx);
     });
     $.pause(refreshStr);
@@ -9409,7 +9429,7 @@ Native["com/nokia/mid/ui/DirectGraphicsImp.drawImage.(Ljavax/microedition/lcdui/
     textEditor.setSize(width, height);
     textEditor.setVisible(false);
     textEditor.setFont(self.font);
-    textEditor.setContent(mycontent);
+    textEditor.setContent(J2ME.fromStringAddr(textAddr) || "");
     setTextEditorCaretPosition(textEditor, self, textEditor.getContentSize());
     textEditor.oninput(function(e) {
       wakeTextEditorThread(addr);
@@ -9435,8 +9455,15 @@ Native["com/nokia/mid/ui/DirectGraphicsImp.drawImage.(Ljavax/microedition/lcdui/
     }
   };
   Native["javax/microedition/lcdui/Display.setTitle.(Ljava/lang/String;)V"] = function(addr, titleAddr) {
-    document.getElementById("header").textContent = J2ME.fromStringAddr(titleAddr);
-	  mytitle = J2ME.fromStringAddr(titleAddr);
+    var t = J2ME.fromStringAddr(titleAddr) || "";
+    var headerEl = document.getElementById("header");
+    if (headerEl) {
+      headerEl.textContent = t;
+    }
+    mytitle = t;
+    if (window.__j2meLcdui) {
+      window.__j2meLcdui.onDisplayTitle(t);
+    }
   };
   Native["com/nokia/mid/ui/CanvasItem.setSize.(II)V"] = function(addr, width, height) {
     NativeMap.get(addr).setSize(width, height);
@@ -9497,23 +9524,25 @@ Native["com/nokia/mid/ui/DirectGraphicsImp.drawImage.(Ljavax/microedition/lcdui/
     setTextEditorCaretPosition(textEditor, self, index);
   };
   
-  Native["javax/microedition/lcdui/TextFieldLFImpl.getString0.(ILcom/sun/midp/lcdui/DynamicCharacterArray;)Z"] = function(addr,chars,buffer) {
-    //var textEditor = J2ME.getHandle(buffer);
-	  var methodInfo = CLASSES.getClass("com/sun/midp/lcdui/DynamicCharacterArray").getMethodByNameString("set", "([CII)V");
-    var met = J2ME.getLinkedMethod(methodInfo)
-
-    //mycontent="123123123"
-    var chararray = J2ME.newCharArray(mycontent.length);
-
+  Native["javax/microedition/lcdui/TextFieldLFImpl.getString0.(ILcom/sun/midp/lcdui/DynamicCharacterArray;)Z"] = function(addr, nativeId, bufferAddr) {
+    if (!bufferAddr || bufferAddr === J2ME.Constants.NULL) {
+      return 0;
+    }
+    var txt = window.__j2meLcdui ? window.__j2meLcdui.getTextFieldValue(nativeId) : mycontent;
+    if (typeof txt !== "string") {
+      txt = "";
+    }
+    var methodInfo = CLASSES.getClass("com/sun/midp/lcdui/DynamicCharacterArray").getMethodByNameString("set", "([CII)V");
+    var met = J2ME.getLinkedMethod(methodInfo);
+    var chararray = J2ME.newCharArray(txt.length);
     J2ME.setUncollectable(chararray);
     var array = J2ME.getArrayFromAddr(chararray);
-    for (var n = 0; n < mycontent.length; ++n) {
-        array[n] = mycontent.charCodeAt(n);
-    }  
+    for (var n = 0; n < txt.length; ++n) {
+      array[n] = txt.charCodeAt(n);
+    }
     J2ME.unsetUncollectable(chararray);
- 
-	  met(buffer,chararray,0,mycontent.length);
-    return true;
+    met(bufferAddr, chararray, 0, txt.length);
+    return 1;
   }; 
   
   Native["com/nokia/mid/ui/TextEditor.getCaretPosition.()I"] = function(addr) {
@@ -9608,290 +9637,1645 @@ Native["com/nokia/mid/ui/DirectGraphicsImp.drawImage.(Ljavax/microedition/lcdui/
   };
   var curDisplayableId = 0;
   var nextMidpDisplayableId = 1;
-  var PLAIN = 0;
-  Native["javax/microedition/lcdui/DisplayableLFImpl.initialize0.()V"] = function(addr) {
-  };
-  Native["javax/microedition/lcdui/DisplayableLFImpl.deleteNativeResource0.(I)V"] = function(addr, nativeId) {
-    var el = document.getElementById("displayable-" + nativeId);
-    if (el) {
-      el.parentElement.removeChild(el);
-      if (currentlyFocusedTextEditor) {
-        currentlyFocusedTextEditor.focus();
-      }
-    } else {
-      if (currentlyFocusedTextEditor) {
-        currentlyFocusedTextEditor.blur();
-      }
-    }
-  };
-  Native["javax/microedition/lcdui/DisplayableLFImpl.setTitle0.(ILjava/lang/String;)V"] = function(addr, nativeId, titleAddr) {
-    document.getElementById("display_title").textContent = J2ME.fromStringAddr(titleAddr);
-	mytitle = J2ME.fromStringAddr(titleAddr);
-  };
-  Native["javax/microedition/lcdui/CanvasLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;)I"] = function(addr, titleAddr, tickerAddr) {
-    console.warn("javax/microedition/lcdui/CanvasLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;)I not implemented");
-    curDisplayableId = nextMidpDisplayableId++;
-    return curDisplayableId;
-  };
-  Native["javax/microedition/lcdui/AlertLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;I)I"] = function(addr, titleAddr, tickerAddr, type) {
-    var nativeId = nextMidpDisplayableId++;
-    // var alertTemplateNode = document.getElementById("lcdui-alert");
-    // var el = alertTemplateNode.cloneNode(true);
-    // el.id = "displayable-" + nativeId;
-    // el.querySelector("h1.title").textContent = J2ME.fromStringAddr(titleAddr);
-    // alertTemplateNode.parentNode.appendChild(el);
-    return nativeId;
-  };
-  Native["javax/microedition/lcdui/AlertLFImpl.setNativeContents0.(ILjavax/microedition/lcdui/ImageData;[ILjava/lang/String;)Z"] = function(addr, nativeId, imgIdAddr, indicatorBoundsAddr, textAddr) {
-    // var el = document.getElementById("displayable-" + nativeId);
-    // el.querySelector("p.text").textContent = J2ME.fromStringAddr(textAddr);
-    return 0;
-  };
-  Native["javax/microedition/lcdui/AlertLFImpl.showNativeResource0.(I)V"] = function(addr, nativeId) {
-    var el = document.getElementById("displayable-" + nativeId);
-    el.style.display = "block";
-    el.classList.add("visible");
-    if (currentlyFocusedTextEditor) {
-      currentlyFocusedTextEditor.blur();
-    }
-    curDisplayableId = nativeId;
-  };
-  var INDEFINITE = -1;
-  var CONTINUOUS_RUNNING = 2;
-  Native["javax/microedition/lcdui/GaugeLFImpl.createNativeResource0.(ILjava/lang/String;IZII)I"] = function(addr, ownerId, labelAddr, layout, interactive, maxValue, initialValue) {
-    if (labelAddr !== J2ME.Constants.NULL) {
-      console.error("Expected null label");
-    }
-    if (layout !== PLAIN) {
-      console.error("Expected PLAIN layout");
-    }
-    if (interactive) {
-      console.error("Expected not interactive gauge");
-    }
-    if (maxValue !== INDEFINITE) {
-      console.error("Expected INDEFINITE maxValue");
-    }
-    if (initialValue !== CONTINUOUS_RUNNING) {
-      console.error("Expected CONTINUOUS_RUNNING initialValue");
-    }
-    var el = document.getElementById("displayable-" + ownerId);
-    el.querySelector("progress").style.display = "inline";
-    return nextMidpDisplayableId++;
-  };
-  Native["javax/microedition/lcdui/TextFieldLFImpl.createNativeResource0.(ILjava/lang/String;ILcom/sun/midp/lcdui/DynamicCharacterArray;ILjava/lang/String;)I"] = function(addr, ownerId, labelAddr, layout, bufferAddr, constraints, initialInputModeAddr) {
-    console.warn("javax/microedition/lcdui/TextFieldLFImpl.createNativeResource0.(ILjava/lang/String;ILcom/sun/midp/lcdui/DynamicCharacterArray;ILjava/lang/String;)I not implemented");
-    return nextMidpDisplayableId++;
-  };
-  Native["javax/microedition/lcdui/ImageItemLFImpl.createNativeResource0.(ILjava/lang/String;ILjavax/microedition/lcdui/ImageData;Ljava/lang/String;I)I"] = function(addr, ownerId, labelAddr, layout, imageDataAddr, altTextAddr, appearanceMode) {
-    console.warn("javax/microedition/lcdui/ImageItemLFImpl.createNativeResource0.(ILjava/lang/String;ILjavax/microedition/lcdui/ImageData;Ljava/lang/String;I)I not implemented");
-    return nextMidpDisplayableId++;
-  };
-  addUnimplementedNative("javax/microedition/lcdui/FormLFImpl.setScrollPosition0.(I)V");
-  addUnimplementedNative("javax/microedition/lcdui/FormLFImpl.getScrollPosition0.()I", 0);
-  addUnimplementedNative("javax/microedition/lcdui/FormLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;)I", function() {
-    return nextMidpDisplayableId++;
-  });
-  addUnimplementedNative("javax/microedition/lcdui/FormLFImpl.showNativeResource0.(IIII)V");
-  addUnimplementedNative("javax/microedition/lcdui/FormLFImpl.getViewportHeight0.()I", 0);
-  addUnimplementedNative("javax/microedition/lcdui/StringItemLFImpl.createNativeResource0.(ILjava/lang/String;ILjava/lang/String;ILjavax/microedition/lcdui/Font;)I", function() {
-    return nextMidpDisplayableId++;
-  });
-  Native["javax/microedition/lcdui/ItemLFImpl.setSize0.(III)V"] = function(addr, nativeId, w, h) {
-    console.warn("javax/microedition/lcdui/ItemLFImpl.setSize0.(III)V not implemented");
-  };
-  Native["javax/microedition/lcdui/ItemLFImpl.setLocation0.(III)V"] = function(addr, nativeId, x, y) {
-    console.warn("javax/microedition/lcdui/ItemLFImpl.setLocation0.(III)V not implemented");
-  };
-  Native["javax/microedition/lcdui/ItemLFImpl.show0.(I)V"] = function(addr, nativeId) {
-    console.warn("javax/microedition/lcdui/ItemLFImpl.show0.(I)V not implemented");
-  };
-  Native["javax/microedition/lcdui/ItemLFImpl.hide0.(I)V"] = function(addr, nativeId) {
-    console.warn("javax/microedition/lcdui/ItemLFImpl.hide0.(I)V not implemented");
-  };
-
-
-  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.getSelectedIndex0.(I)I"] = function(addr) {
-    return 0;
-  };
-
-  
-  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.createNativeResource0.(ILjava/lang/String;III[Ljavax/microedition/lcdui/ChoiceGroup$CGElement;II)I"] = function(addr, name,A2,A3,A4,A6,cGElementArr,selectedIndex,A7) {
-  
-    console.log(name,J2ME.fromStringAddr(name),selectedIndex)
-
-    var commands = J2ME.getArrayFromAddr(cGElementArr);
-    var validCommands = [];
-    for (var i = 0;i < commands.length;i++) {
-      if (commands[i]) {
-        validCommands.push(getHandle(commands[i]));
-      }
-    }
-    
-    var menu = document.getElementById("sidebar").querySelector("nav ul");
-    var okCommand = null;
-    var backCommand = null;
-    var isSidebarEmpty = true;
-    validCommands.forEach(function(command) { 
-
-      var field =  command.classInfo.fields[0]
-      var filedstring = i32[command._address + field.byteOffset >> 2];
-      var text = J2ME.fromStringAddr(filedstring);
-      console.log(text);
-      var li = document.createElement("li"); 
-      var a = document.createElement("a");
-      a.textContent = text;
-      li.appendChild(a);
-      li.onclick = function(e) {
-        e.preventDefault();
-        window.location.hash = "";
-        sendEvent(command);
-      };
-      menu.appendChild(li);
-      isSidebarEmpty = false;
-    });
-    var header = document.getElementById("header");
-    header.style.display = "block";
-    document.getElementById("header-drawer-button").style.display = isSidebarEmpty ? "none" : "block";
-    var headerBtn = document.getElementById("header-ok-button");
-    if (okCommand) {
-      headerBtn.style.display = "block";
-      headerBtn.onclick = sendEvent.bind(headerBtn, okCommand);
-    } else {
-      headerBtn.style.display = "none";
-    }
-    var backBtn = document.getElementById("back-button");
-    if (backCommand) {
-      backBtn.style.display = "block";
-      backBtn.onclick = sendEvent.bind(backBtn, backCommand);
-    } else {
-      backBtn.style.display = "none";
-    }
-
-    return nextMidpDisplayableId++;
-    //console.warn("javax/microedition/lcdui/ChoiceGroupLFImpl.createNativeResource0.(ILjava/lang/String;III[Ljavax/microedition/lcdui/ChoiceGroup$CGElement;II)I not implemented");
-  };
-
-  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.insert0(IILjava/lang/String;Ljavax/microedition/lcdui/ImageData;Z)V"] = function(str,imgdata,b,a){
-    var name = J2ME.fromStringAddr(str);
-    console.log(name)
-  };
-
-  addUnimplementedNative("javax/microedition/lcdui/ItemLFImpl.getMinimumWidth0.(I)I", 10);
-  addUnimplementedNative("javax/microedition/lcdui/ItemLFImpl.getMinimumHeight0.(I)I", 10);
-  addUnimplementedNative("javax/microedition/lcdui/ItemLFImpl.getPreferredWidth0.(II)I", 10);
-  addUnimplementedNative("javax/microedition/lcdui/ItemLFImpl.getPreferredHeight0.(II)I", 10);
-  addUnimplementedNative("javax/microedition/lcdui/ItemLFImpl.delete0.(I)V");
   var BACK = 2;
   var CANCEL = 3;
   var OK = 4;
   var STOP = 6;
-  Native["javax/microedition/lcdui/NativeMenu.updateCommands.([Ljavax/microedition/lcdui/Command;I[Ljavax/microedition/lcdui/Command;I)V"] = function(addr, itemCommandsAddr, numItemCommands, commandsAddr, numCommands) {
-    
-  return;
-  
-    try{
-    if (numItemCommands !== 0) {
-      console.error("NativeMenu.updateCommands: item commands not yet supported");
-    }
-    var el = document.getElementById("displayable-" + curDisplayableId);
-    if (!el) {
-      document.getElementById("sidebar").querySelector("nav ul").innerHTML = "";
-    }
-    if (commandsAddr === J2ME.Constants.NULL) {
-      return;
-    }
-    var commands = J2ME.getArrayFromAddr(commandsAddr);
-    var validCommands = [];
-    for (var i = 0;i < commands.length;i++) {
-      if (commands[i]) {
-        validCommands.push(getHandle(commands[i]));
+  var EXIT = 7;
+
+  var LCDUI = (function() {
+    var HEADER_H = 26;
+    var FOOTER_H = 24;
+    var screens = Object.create(null);
+    var items = Object.create(null);
+    var activeScreenId = null;
+    var hitRegions = [];
+    var commandsState = {
+      all: [],
+      left: null,
+      right: null,
+      menuOpen: false,
+      menuItems: [],
+      menuIndex: 0
+    };
+    var caretBlinkOn = true;
+    var blinkTimer = null;
+
+    function safeStr(addr) {
+      if (!addr || addr === J2ME.Constants.NULL || typeof addr !== "number") return "";
+      try {
+        return J2ME.fromStringAddr(addr) || "";
+      } catch (e) {
+        return "";
       }
     }
-    validCommands.sort(function(a, b) {
-      return a.priority - b.priority;
-    });
-    function sendEvent(command) {
-      MIDP.sendCommandEvent(command.id);
-    }
-    if (el) {
-      if (numCommands > 2 && validCommands.length > 2) {
-        console.error("NativeMenu.updateCommands: max two commands supported");
+
+    function readDynamicCharArray(bufferAddr) {
+      if (!bufferAddr || bufferAddr === J2ME.Constants.NULL) return "";
+      try {
+        var obj = getHandle(bufferAddr);
+        if (!obj || !obj.buffer || obj.buffer === J2ME.Constants.NULL) return "";
+        var arr = J2ME.getArrayFromAddr(obj.buffer);
+        var len = obj.length | 0;
+        var s = "";
+        for (var i = 0; i < len && i < arr.length; i++) {
+          s += String.fromCharCode(arr[i]);
+        }
+        return s;
+      } catch (e) {
+        return "";
       }
-      validCommands.slice(0, 2).forEach(function(command, i) {
-        var button = el.querySelector(".button" + i);
-        button.style.display = "inline";
-        button.textContent = J2ME.fromStringAddr(command.shortLabel);
-        var commandType = command.commandType;
-        if (numCommands === 1 || commandType === OK) {
-          button.classList.add("recommend");
-          button.classList.remove("cancel");
-        } else {
-          if (commandType === CANCEL || commandType === BACK || commandType === STOP) {
-            button.classList.add("cancel");
-            button.classList.remove("recommend");
+    }
+
+    function getImageCanvas(imageDataAddr) {
+      if (!imageDataAddr || imageDataAddr === J2ME.Constants.NULL) return null;
+      try {
+        var info = NativeMap.get(imageDataAddr);
+        return info && info.context && info.context.canvas ? info.context.canvas : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function notifyParentSoftkeys(left, center, right) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            type: "softkeys",
+            left: left || "",
+            center: center || "",
+            right: right || ""
+          }, "*");
+        }
+      } catch (e) {}
+    }
+
+    function notifyParentTitle(title) {
+      try {
+        if (window.parent && window.parent !== window && title) {
+          window.parent.postMessage({ type: "vm-title", title: title }, "*");
+        }
+      } catch (e) {}
+    }
+
+    function isNegativeType(t) {
+      return t === BACK || t === CANCEL || t === STOP || t === EXIT;
+    }
+
+    function syncSoftkeyLabels() {
+      if (!isActive()) {
+        notifyParentSoftkeys("Tùy chọn", "OK", "Quay lại");
+        return;
+      }
+      var l = commandsState.menuOpen
+        ? "Chọn"
+        : (commandsState.left ? commandsState.left.shortLabel : "");
+      var r = commandsState.menuOpen
+        ? "Đóng"
+        : (commandsState.right ? commandsState.right.shortLabel : "");
+      var s = screens[activeScreenId];
+      var center = "OK";
+      if (!commandsState.menuOpen && s) {
+        var focused = s.focusItemId != null ? items[s.focusItemId] : null;
+        if (focused && focused.kind === "textfield") {
+          center = "Nhập";
+        } else if (focused && focused.kind === "choice" && focused.choiceType === 2) {
+          center = "Đánh dấu";
+        } else if (s.kind === "alert") {
+          center = "OK";
+        }
+      }
+      notifyParentSoftkeys(l, center, r);
+    }
+
+    function startBlink() {
+      if (blinkTimer) return;
+      blinkTimer = setInterval(function() {
+        if (!isActive()) {
+          clearInterval(blinkTimer);
+          blinkTimer = null;
+          return;
+        }
+        var s = screens[activeScreenId];
+        var f = s && s.focusItemId != null ? items[s.focusItemId] : null;
+        if (f && f.kind === "textfield") {
+          caretBlinkOn = !caretBlinkOn;
+          render();
+        }
+      }, 550);
+    }
+
+    function getCanvasDims() {
+      var c = MIDP.deviceContext && MIDP.deviceContext.canvas;
+      return {
+        w: (c && c.width) || 240,
+        h: (c && c.height) || 320
+      };
+    }
+
+    function wrapLines(ctx, text, maxWidth) {
+      if (!text) return [""];
+      var rawLines = String(text).split("\n");
+      var lines = [];
+      for (var r = 0; r < rawLines.length; r++) {
+        var line = rawLines[r];
+        if (!line) {
+          lines.push("");
+          continue;
+        }
+        var cur = "";
+        for (var i = 0; i < line.length; i++) {
+          var ch = line[i];
+          var test = cur + ch;
+          if (cur && ctx.measureText(test).width > maxWidth) {
+            lines.push(cur);
+            cur = ch === " " ? "" : ch;
+          } else {
+            cur = test;
           }
         }
-        button.onclick = function(e) {
-          e.preventDefault();
-          sendEvent(command);
-        };
-      });
-    } else {
-      var menu = document.getElementById("sidebar").querySelector("nav ul");
-      var okCommand = null;
-      var backCommand = null;
-      var isSidebarEmpty = true;
-      validCommands.forEach(function(command) {
-        var commandType = command.commandType;
-        if (commandType === OK) {
-          okCommand = command;
+        lines.push(cur);
+      }
+      return lines;
+    }
+
+    function measureItemHeight(item, availW) {
+      var ctx = MIDP.deviceContext;
+      if (!ctx) return 28;
+      ctx.save();
+      ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      var padX = 8;
+      var innerW = Math.max(40, availW - padX * 2);
+      var h = 6;
+      if (item.label) {
+        var lblLines = wrapLines(ctx, item.label, innerW);
+        h += lblLines.length * 15 + 2;
+      }
+      if (item.kind === "choice") {
+        if (item.choiceType === 4) {
+          h += 26;
+        } else if (!item.elements || item.elements.length === 0) {
+          h += 24;
+        } else {
+          for (var i = 0; i < item.elements.length; i++) {
+            var el = item.elements[i];
+            var iconPad = (item.choiceType === 1 || item.choiceType === 2 ? 18 : 0) + (el.imageCanvas ? 20 : 0);
+            var lines = wrapLines(ctx, el.text || "", Math.max(30, innerW - 8 - iconPad));
+            h += Math.max(24, lines.length * 16 + 8);
+          }
+        }
+      } else if (item.kind === "textfield") {
+        var s = screens[item.ownerId];
+        var isTextBox = s && s.itemIds.length === 1;
+        var val = (item.constraints & 65536) ? "*".repeat((item.text || "").length) : (item.text || "");
+        var tLines = wrapLines(ctx, val, Math.max(30, innerW - 10));
+        var boxH = Math.max(isTextBox ? 90 : 28, tLines.length * 16 + 10);
+        h += boxH + 4;
+      } else if (item.kind === "string") {
+        var sLines = wrapLines(ctx, item.text || "", Math.max(30, innerW - 4));
+        h += Math.max(18, sLines.length * 16 + (item.appearanceMode === 2 ? 10 : 4));
+      } else if (item.kind === "image") {
+        h += item.imageCanvas ? Math.max(20, item.imageCanvas.height + 6) : 24;
+      } else if (item.kind === "gauge") {
+        h += 24;
+      } else if (item.kind === "date") {
+        h += 26;
+      } else {
+        h += 20;
+      }
+      ctx.restore();
+      return h + 4;
+    }
+
+    function isFocusableItem(item) {
+      if (!item) return false;
+      if (item.kind === "choice" || item.kind === "textfield" || item.kind === "date") return true;
+      if (item.kind === "gauge" && item.interactive) return true;
+      if ((item.kind === "string" || item.kind === "image") && item.appearanceMode > 0) return true;
+      return false;
+    }
+
+    function ensureFocus(screen) {
+      if (!screen || !screen.itemIds.length) {
+        if (screen) screen.focusItemId = null;
+        return;
+      }
+      if (screen.focusItemId != null && items[screen.focusItemId] && screen.itemIds.indexOf(screen.focusItemId) !== -1) {
+        return;
+      }
+      for (var i = 0; i < screen.itemIds.length; i++) {
+        var it = items[screen.itemIds[i]];
+        if (isFocusableItem(it)) {
+          screen.focusItemId = it.nativeId;
           return;
         }
-        if (commandType === BACK) {
-          backCommand = command;
+      }
+      screen.focusItemId = screen.itemIds[0];
+    }
+
+    function fireItemPeerChange(screen, item, value) {
+      if (!screen || !item) return;
+      MIDP.sendPeerChangedEvent(screen.modelVersion || 0, 2, item.nativeId, value || 0);
+    }
+
+    function fireFormFocusChange(screen, item) {
+      if (!screen || !item) return;
+      MIDP.sendPeerChangedEvent(screen.modelVersion || 0, 0, item.nativeId, 0);
+    }
+
+    function isActive() {
+      return activeScreenId !== null && !!screens[activeScreenId];
+    }
+
+    function computeScreenHeight(screen, dims) {
+      if (!screen) return 0;
+      if (screen.kind === "alert") return dims.h - HEADER_H - FOOTER_H;
+      var total = 6;
+      for (var i = 0; i < screen.itemIds.length; i++) {
+        var it = items[screen.itemIds[i]];
+        if (it) total += measureItemHeight(it, dims.w);
+      }
+      return total;
+    }
+
+    function clampScroll(screen, dims) {
+      var viewH = Math.max(40, dims.h - HEADER_H - FOOTER_H);
+      var totalH = computeScreenHeight(screen, dims);
+      var maxScroll = Math.max(0, totalH - viewH);
+      if (screen.scrollY < 0) screen.scrollY = 0;
+      if (screen.scrollY > maxScroll) screen.scrollY = maxScroll;
+    }
+
+    function ensureVisibleY(screen, yTop, yBottom, dims) {
+      var viewH = Math.max(40, dims.h - HEADER_H - FOOTER_H);
+      if (yTop < screen.scrollY) {
+        screen.scrollY = Math.max(0, yTop - 4);
+      } else if (yBottom > screen.scrollY + viewH) {
+        screen.scrollY = Math.max(0, yBottom - viewH + 4);
+      }
+      clampScroll(screen, dims);
+    }
+
+    function scrollFocusedIntoView() {
+      var screen = screens[activeScreenId];
+      if (!screen || screen.kind !== "form") return;
+      var dims = getCanvasDims();
+      var y = 6;
+      for (var i = 0; i < screen.itemIds.length; i++) {
+        var it = items[screen.itemIds[i]];
+        if (!it) continue;
+        var ih = measureItemHeight(it, dims.w);
+        if (it.nativeId === screen.focusItemId) {
+          if (it.kind === "choice" && it.choiceType !== 4 && it.elements && it.elements.length > 0) {
+            var curIdx = Math.max(0, Math.min(it.elements.length - 1, it.selectedIndex >= 0 ? it.selectedIndex : 0));
+            var rowY = y + (it.label ? 18 : 0) + curIdx * 24;
+            ensureVisibleY(screen, rowY, rowY + 28, dims);
+          } else {
+            ensureVisibleY(screen, y, y + ih, dims);
+          }
           return;
         }
-        var li = document.createElement("li");
-        var text = J2ME.fromStringAddr(command.shortLabel);
-        var a = document.createElement("a");
-        a.textContent = text;
-        li.appendChild(a);
-        li.onclick = function(e) {
-          e.preventDefault();
-          window.location.hash = "";
-          sendEvent(command);
+        y += ih;
+      }
+    }
+
+    function render() {
+      if (!isActive()) return;
+      var ctx = MIDP.deviceContext;
+      if (!ctx) return;
+      var dims = getCanvasDims();
+      var W = dims.w;
+      var H = dims.h;
+      var screen = screens[activeScreenId];
+      hitRegions = [];
+
+      ensureFocus(screen);
+      clampScroll(screen, dims);
+
+      ctx.save();
+      ctx.textBaseline = "top";
+
+      // Background
+      ctx.fillStyle = "#f1f5f9";
+      ctx.fillRect(0, 0, W, H);
+
+      // Header bar
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillRect(0, 0, W, HEADER_H);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillRect(0, HEADER_H - 1, W, 1);
+
+      var titleText = screen.title || "JavaDeck";
+      var rightCounter = "";
+      if (screen.kind === "form" && screen.itemIds.length === 1) {
+        var onlyItem = items[screen.itemIds[0]];
+        if (onlyItem && onlyItem.kind === "choice" && onlyItem.elements.length > 0 && onlyItem.selectedIndex >= 0) {
+          rightCounter = (onlyItem.selectedIndex + 1) + "/" + onlyItem.elements.length;
+        }
+      }
+      ctx.font = "bold 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      ctx.fillStyle = "#0f172a";
+      var maxTitleW = W - (rightCounter ? 44 : 16);
+      var displayTitle = titleText;
+      while (displayTitle.length > 3 && ctx.measureText(displayTitle).width > maxTitleW) {
+        displayTitle = displayTitle.slice(0, -4) + "...";
+      }
+      ctx.fillText(displayTitle, 8, 6);
+      if (rightCounter) {
+        ctx.font = "11px monospace";
+        ctx.fillStyle = "#475569";
+        var cw = ctx.measureText(rightCounter).width;
+        ctx.fillText(rightCounter, W - cw - 8, 7);
+      }
+
+      // Viewport clip
+      var viewY = HEADER_H;
+      var viewH = Math.max(20, H - HEADER_H - FOOTER_H);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, viewY, W, viewH);
+      ctx.clip();
+
+      if (screen.kind === "alert") {
+        var cardX = 12;
+        var cardY = viewY + 14;
+        var cardW = W - 24;
+        var cardH = Math.min(viewH - 28, Math.max(90, viewH - 36));
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(cardX, cardY, cardW, cardH);
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(cardX, cardY, cardW, cardH);
+
+        var ay = cardY + 10;
+        if (screen.alertImageCanvas) {
+          var iw = Math.min(36, screen.alertImageCanvas.width);
+          var ih = Math.min(36, screen.alertImageCanvas.height);
+          ctx.drawImage(screen.alertImageCanvas, cardX + (cardW - iw) / 2, ay, iw, ih);
+          ay += ih + 8;
+        }
+        ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+        ctx.fillStyle = "#0f172a";
+        var alertLines = wrapLines(ctx, screen.alertText || screen.title || "", cardW - 20);
+        for (var al = 0; al < alertLines.length && ay < cardY + cardH - 22; al++) {
+          ctx.fillText(alertLines[al], cardX + 10, ay);
+          ay += 16;
+        }
+        if (screen.indicatorId && items[screen.indicatorId]) {
+          var g = items[screen.indicatorId];
+          var barX = cardX + 12;
+          var barW = cardW - 24;
+          var barY = cardY + cardH - 20;
+          ctx.fillStyle = "#e2e8f0";
+          ctx.fillRect(barX, barY, barW, 8);
+          ctx.fillStyle = "#2563eb";
+          var pct = g.maxValue > 0 ? Math.max(0, Math.min(1, g.value / g.maxValue)) : 0.45;
+          ctx.fillRect(barX, barY, Math.round(barW * pct), 8);
+        }
+      } else {
+        var curY = viewY + 6 - screen.scrollY;
+        var isSingleChoiceList = screen.itemIds.length === 1 && items[screen.itemIds[0]] && items[screen.itemIds[0]].kind === "choice";
+        for (var idx = 0; idx < screen.itemIds.length; idx++) {
+          var item = items[screen.itemIds[idx]];
+          if (!item) continue;
+          var itemH = measureItemHeight(item, W);
+          var isFocused = screen.focusItemId === item.nativeId;
+          var padX = 8;
+          var innerW = Math.max(40, W - padX * 2);
+          var drawY = curY + 2;
+
+          if (item.label) {
+            ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+            ctx.fillStyle = isFocused ? "#1d4ed8" : "#475569";
+            var lblLines = wrapLines(ctx, item.label, innerW);
+            for (var ll = 0; ll < lblLines.length; ll++) {
+              ctx.fillText(lblLines[ll], padX, drawY);
+              drawY += 15;
+            }
+            drawY += 2;
+          }
+
+          if (item.kind === "choice") {
+            if (item.choiceType === 4) {
+              // POPUP choice
+              var curEl = item.elements[Math.max(0, item.selectedIndex)] || { text: "(Trống)" };
+              ctx.fillStyle = isFocused ? "#dbeafe" : "#ffffff";
+              ctx.fillRect(padX, drawY, innerW, 24);
+              ctx.strokeStyle = isFocused ? "#2563eb" : "#94a3b8";
+              ctx.lineWidth = isFocused ? 1.5 : 1;
+              ctx.strokeRect(padX, drawY, innerW, 24);
+              ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+              ctx.fillStyle = "#0f172a";
+              ctx.fillText(curEl.text || "", padX + 6, drawY + 5);
+              ctx.fillText("▾", padX + innerW - 14, drawY + 5);
+              (function(itRef, sRef) {
+                hitRegions.push({
+                  x: padX, y: drawY, w: innerW, h: 24,
+                  onTap: function() {
+                    sRef.focusItemId = itRef.nativeId;
+                    if (itRef.elements.length > 0) {
+                      var nxt = (itRef.selectedIndex + 1) % itRef.elements.length;
+                      setChoiceSelected(itRef, nxt, true);
+                      fireItemPeerChange(sRef, itRef, 0);
+                    }
+                    render();
+                  }
+                });
+              })(item, screen);
+            } else if (!item.elements || item.elements.length === 0) {
+              ctx.font = "italic 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+              ctx.fillStyle = "#64748b";
+              ctx.fillText("(Danh sách trống)", padX + 4, drawY + 4);
+            } else {
+              for (var ei = 0; ei < item.elements.length; ei++) {
+                var el = item.elements[ei];
+                var iconPad = (item.choiceType === 1 || item.choiceType === 2 ? 18 : 0) + (el.imageCanvas ? 20 : 0);
+                ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+                var elLines = wrapLines(ctx, el.text || "", Math.max(30, innerW - 8 - iconPad));
+                var rowH = Math.max(24, elLines.length * 16 + 8);
+                var isRowActive = isFocused && ei === item.selectedIndex;
+
+                if (isRowActive) {
+                  ctx.fillStyle = "#dbeafe";
+                  ctx.fillRect(padX - 2, drawY, innerW + 4, rowH);
+                  ctx.strokeStyle = "#2563eb";
+                  ctx.lineWidth = 1.5;
+                  ctx.strokeRect(padX - 2, drawY, innerW + 4, rowH);
+                } else if (isSingleChoiceList) {
+                  ctx.fillStyle = "#f8fafc";
+                  ctx.fillRect(padX - 2, drawY, innerW + 4, rowH);
+                  ctx.strokeStyle = "#e2e8f0";
+                  ctx.lineWidth = 1;
+                  ctx.strokeRect(padX - 2, drawY, innerW + 4, rowH);
+                }
+
+                var tx = padX + 4;
+                if (item.choiceType === 1) {
+                  // EXCLUSIVE radio
+                  ctx.strokeStyle = el.selected ? "#2563eb" : "#64748b";
+                  ctx.lineWidth = 1.5;
+                  ctx.beginPath();
+                  ctx.arc(tx + 6, drawY + rowH / 2, 5, 0, Math.PI * 2);
+                  ctx.stroke();
+                  if (el.selected) {
+                    ctx.fillStyle = "#2563eb";
+                    ctx.beginPath();
+                    ctx.arc(tx + 6, drawY + rowH / 2, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                  }
+                  tx += 18;
+                } else if (item.choiceType === 2) {
+                  // MULTIPLE checkbox
+                  ctx.strokeStyle = el.selected ? "#2563eb" : "#64748b";
+                  ctx.lineWidth = 1.5;
+                  ctx.strokeRect(tx + 1, drawY + rowH / 2 - 5, 10, 10);
+                  if (el.selected) {
+                    ctx.fillStyle = "#2563eb";
+                    ctx.fillRect(tx + 3, drawY + rowH / 2 - 3, 6, 6);
+                  }
+                  tx += 18;
+                }
+
+                if (el.imageCanvas) {
+                  ctx.drawImage(el.imageCanvas, tx, drawY + Math.max(2, (rowH - 16) / 2), 16, 16);
+                  tx += 20;
+                }
+
+                ctx.fillStyle = isRowActive ? "#0f172a" : "#1e293b";
+                ctx.font = (isRowActive ? "600 " : "") + "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+                for (var li = 0; li < elLines.length; li++) {
+                  ctx.fillText(elLines[li], tx, drawY + 5 + li * 16);
+                }
+
+                (function(itRef, sRef, rowIdx, ry, rh) {
+                  hitRegions.push({
+                    x: padX - 2, y: Math.max(viewY, ry), w: innerW + 4, h: rh,
+                    onTap: function() {
+                      var prevFocus = sRef.focusItemId;
+                      var prevIdx = itRef.selectedIndex;
+                      sRef.focusItemId = itRef.nativeId;
+                      if (prevFocus !== itRef.nativeId) {
+                        fireFormFocusChange(sRef, itRef);
+                      }
+                      if (itRef.choiceType === 2) {
+                        itRef.selectedIndex = rowIdx;
+                        itRef.elements[rowIdx].selected = !itRef.elements[rowIdx].selected;
+                        fireItemPeerChange(sRef, itRef, 0);
+                      } else if (itRef.choiceType === 3) {
+                        setChoiceSelected(itRef, rowIdx, true);
+                        if (prevIdx === rowIdx) {
+                          fireItemPeerChange(sRef, itRef, 0);
+                        }
+                      } else {
+                        setChoiceSelected(itRef, rowIdx, true);
+                        fireItemPeerChange(sRef, itRef, 0);
+                      }
+                      render();
+                    }
+                  });
+                })(item, screen, ei, drawY, rowH);
+
+                drawY += rowH;
+              }
+            }
+          } else if (item.kind === "textfield") {
+            var isTextBox = screen.itemIds.length === 1;
+            var rawText = item.text || "";
+            var masked = (item.constraints & 65536) ? "*".repeat(rawText.length) : rawText;
+            ctx.font = "12px monospace";
+            var tLines = wrapLines(ctx, masked, Math.max(30, innerW - 10));
+            var boxH = Math.max(isTextBox ? 90 : 28, tLines.length * 16 + 10);
+
+            ctx.fillStyle = (item.constraints & 131072) ? "#e2e8f0" : "#ffffff";
+            ctx.fillRect(padX, drawY, innerW, boxH);
+            ctx.strokeStyle = isFocused ? "#2563eb" : "#94a3b8";
+            ctx.lineWidth = isFocused ? 2 : 1;
+            ctx.strokeRect(padX, drawY, innerW, boxH);
+
+            ctx.fillStyle = "#0f172a";
+            for (var tl = 0; tl < tLines.length; tl++) {
+              ctx.fillText(tLines[tl], padX + 5, drawY + 6 + tl * 16);
+            }
+            if (isFocused && caretBlinkOn && !(item.constraints & 131072)) {
+              var lastLine = tLines[tLines.length - 1] || "";
+              var cx = Math.min(padX + innerW - 4, padX + 5 + ctx.measureText(lastLine).width);
+              var cy = drawY + 5 + (tLines.length - 1) * 16;
+              ctx.fillStyle = "#2563eb";
+              ctx.fillRect(cx, cy, 1.5, 14);
+            }
+
+            (function(itRef, sRef, ry, bh) {
+              hitRegions.push({
+                x: padX, y: Math.max(viewY, ry), w: innerW, h: bh,
+                onTap: function() {
+                  if (sRef.focusItemId !== itRef.nativeId) {
+                    sRef.focusItemId = itRef.nativeId;
+                    fireFormFocusChange(sRef, itRef);
+                  }
+                  startBlink();
+                  render();
+                }
+              });
+            })(item, screen, drawY, boxH);
+          } else if (item.kind === "string") {
+            ctx.font = (item.appearanceMode === 2 ? "600 " : "") + "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+            var sLines = wrapLines(ctx, item.text || "", Math.max(30, innerW - 8));
+            var sh = Math.max(18, sLines.length * 16 + (item.appearanceMode === 2 ? 10 : 4));
+            if (item.appearanceMode === 2) {
+              ctx.fillStyle = isFocused ? "#dbeafe" : "#e2e8f0";
+              ctx.fillRect(padX, drawY, innerW, sh);
+              ctx.strokeStyle = isFocused ? "#2563eb" : "#94a3b8";
+              ctx.lineWidth = isFocused ? 1.5 : 1;
+              ctx.strokeRect(padX, drawY, innerW, sh);
+            } else if (isFocused && item.appearanceMode === 1) {
+              ctx.strokeStyle = "#2563eb";
+              ctx.lineWidth = 1;
+              ctx.strokeRect(padX, drawY, innerW, sh);
+            }
+            ctx.fillStyle = item.appearanceMode === 1 ? "#1d4ed8" : "#0f172a";
+            for (var sl = 0; sl < sLines.length; sl++) {
+              ctx.fillText(sLines[sl], padX + 4, drawY + (item.appearanceMode === 2 ? 5 : 2) + sl * 16);
+            }
+            (function(itRef, sRef, ry, rh) {
+              hitRegions.push({
+                x: padX, y: Math.max(viewY, ry), w: innerW, h: rh,
+                onTap: function() {
+                  sRef.focusItemId = itRef.nativeId;
+                  fireFormFocusChange(sRef, itRef);
+                  fireItemPeerChange(sRef, itRef, 0);
+                  render();
+                }
+              });
+            })(item, screen, drawY, sh);
+          } else if (item.kind === "image") {
+            if (item.imageCanvas) {
+              var dx = padX + Math.max(0, Math.min(innerW - item.imageCanvas.width, 0));
+              ctx.drawImage(item.imageCanvas, dx, drawY + 2);
+            } else if (item.altText) {
+              ctx.font = "12px sans-serif";
+              ctx.fillStyle = "#475569";
+              ctx.fillText(item.altText, padX + 4, drawY + 2);
+            }
+          } else if (item.kind === "gauge") {
+            ctx.fillStyle = "#e2e8f0";
+            ctx.fillRect(padX, drawY + 4, innerW, 12);
+            ctx.strokeStyle = isFocused ? "#2563eb" : "#94a3b8";
+            ctx.strokeRect(padX, drawY + 4, innerW, 12);
+            var gPct = item.maxValue > 0 ? Math.max(0, Math.min(1, item.value / item.maxValue)) : 0.5;
+            ctx.fillStyle = "#2563eb";
+            ctx.fillRect(padX + 1, drawY + 5, Math.max(0, Math.round((innerW - 2) * gPct)), 10);
+          } else if (item.kind === "date") {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(padX, drawY, innerW, 24);
+            ctx.strokeStyle = isFocused ? "#2563eb" : "#94a3b8";
+            ctx.strokeRect(padX, drawY, innerW, 24);
+            ctx.font = "12px monospace";
+            ctx.fillStyle = "#0f172a";
+            var dStr = item.dateMillis ? new Date(item.dateMillis).toLocaleString("vi-VN") : "(Chưa chọn ngày)";
+            ctx.fillText(dStr, padX + 6, drawY + 5);
+          }
+
+          curY += itemH;
+        }
+      }
+
+      // Scrollbar if needed
+      var totalH = computeScreenHeight(screen, dims);
+      if (totalH > viewH) {
+        var barH = Math.max(18, Math.round((viewH / totalH) * viewH));
+        var barY = viewY + Math.round((screen.scrollY / Math.max(1, totalH - viewH)) * (viewH - barH));
+        ctx.fillStyle = "rgba(100,116,139,0.5)";
+        ctx.fillRect(W - 4, barY, 3, barH);
+      }
+
+      ctx.restore();
+
+      // Options Popup Menu if open
+      if (commandsState.menuOpen && commandsState.menuItems.length > 0) {
+        var mItems = commandsState.menuItems;
+        var rowM = 26;
+        var menuH = mItems.length * rowM + 8;
+        var menuW = Math.min(W - 16, 180);
+        var menuX = W - menuW - 6;
+        var menuY = H - FOOTER_H - menuH - 4;
+        ctx.fillStyle = "rgba(15, 23, 42, 0.25)";
+        ctx.fillRect(0, viewY, W, viewH);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(menuX, menuY, menuW, menuH);
+        ctx.strokeStyle = "#1e293b";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(menuX, menuY, menuW, menuH);
+
+        for (var mi = 0; mi < mItems.length; mi++) {
+          var mc = mItems[mi];
+          var ry = menuY + 4 + mi * rowM;
+          var activeM = mi === commandsState.menuIndex;
+          if (activeM) {
+            ctx.fillStyle = "#2563eb";
+            ctx.fillRect(menuX + 3, ry, menuW - 6, rowM - 2);
+          }
+          ctx.font = (activeM ? "600 " : "") + "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+          ctx.fillStyle = activeM ? "#ffffff" : "#0f172a";
+          ctx.fillText(mc.shortLabel || mc.longLabel || "OK", menuX + 10, ry + 6);
+          (function(idxM) {
+            hitRegions.push({
+              x: menuX, y: ry, w: menuW, h: rowM,
+              onTap: function() {
+                executeMenuItem(idxM);
+              }
+            });
+          })(mi);
+        }
+      }
+
+      // Softkey footer bar
+      var fy = H - FOOTER_H;
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillRect(0, fy, W, FOOTER_H);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillRect(0, fy, W, 1);
+
+      var leftLabel = commandsState.menuOpen
+        ? "Chọn"
+        : (commandsState.left ? commandsState.left.shortLabel : "");
+      var rightLabel = commandsState.menuOpen
+        ? "Đóng"
+        : (commandsState.right ? commandsState.right.shortLabel : "");
+
+      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      if (leftLabel) {
+        ctx.fillStyle = "#0f172a";
+        ctx.fillText(leftLabel, 8, fy + 6);
+        hitRegions.push({
+          x: 0, y: fy, w: Math.floor(W * 0.42), h: FOOTER_H,
+          onTap: function() { triggerSoftkey("left"); }
+        });
+      }
+      if (rightLabel) {
+        ctx.fillStyle = "#1d4ed8";
+        var rw = ctx.measureText(rightLabel).width;
+        ctx.fillText(rightLabel, W - rw - 8, fy + 6);
+        hitRegions.push({
+          x: Math.floor(W * 0.58), y: fy, w: Math.ceil(W * 0.42), h: FOOTER_H,
+          onTap: function() { triggerSoftkey("right"); }
+        });
+      }
+
+      ctx.restore();
+    }
+
+    function executeCommand(cmd) {
+      if (!cmd) return;
+      if (cmd.isMenuTrigger) {
+        commandsState.menuOpen = true;
+        commandsState.menuIndex = 0;
+        syncSoftkeyLabels();
+        render();
+        return;
+      }
+      commandsState.menuOpen = false;
+      syncSoftkeyLabels();
+      MIDP.sendCommandEvent(cmd.id);
+    }
+
+    function executeMenuItem(idx) {
+      var cmd = commandsState.menuItems[idx];
+      commandsState.menuOpen = false;
+      syncSoftkeyLabels();
+      render();
+      if (cmd) {
+        MIDP.sendCommandEvent(cmd.id);
+      }
+    }
+
+    function triggerSoftkey(side) {
+      if (commandsState.menuOpen) {
+        if (side === "left") {
+          executeMenuItem(commandsState.menuIndex);
+        } else {
+          commandsState.menuOpen = false;
+          syncSoftkeyLabels();
+          render();
+        }
+        return;
+      }
+      var cmd = side === "left" ? commandsState.left : commandsState.right;
+      if (cmd) {
+        executeCommand(cmd);
+      }
+    }
+
+    function setChoiceSelected(item, index, selected) {
+      if (!item || !item.elements || index < 0 || index >= item.elements.length) return;
+      if (item.choiceType === 1 || item.choiceType === 3 || item.choiceType === 4) {
+        if (selected) {
+          for (var i = 0; i < item.elements.length; i++) {
+            item.elements[i].selected = (i === index);
+          }
+          item.selectedIndex = index;
+        } else if (item.selectedIndex === index) {
+          item.elements[index].selected = false;
+        }
+      } else {
+        item.elements[index].selected = !!selected;
+        item.selectedIndex = index;
+      }
+    }
+
+    function moveFocusInForm(screen, delta) {
+      if (!screen || screen.itemIds.length === 0) return;
+      var curItem = screen.focusItemId != null ? items[screen.focusItemId] : null;
+      if (curItem && curItem.kind === "choice" && curItem.choiceType !== 4 && curItem.elements && curItem.elements.length > 0) {
+        var curEl = curItem.selectedIndex >= 0 ? curItem.selectedIndex : 0;
+        var nextEl = curEl + delta;
+        if (nextEl >= 0 && nextEl < curItem.elements.length) {
+          if (curItem.choiceType === 2) {
+            curItem.selectedIndex = nextEl;
+          } else {
+            setChoiceSelected(curItem, nextEl, true);
+          }
+          scrollFocusedIntoView();
+          render();
+          return;
+        }
+      }
+      var idx = screen.itemIds.indexOf(screen.focusItemId);
+      if (idx === -1) idx = 0;
+      var nextIdx = idx + delta;
+      while (nextIdx >= 0 && nextIdx < screen.itemIds.length) {
+        var candidate = items[screen.itemIds[nextIdx]];
+        if (isFocusableItem(candidate)) {
+          screen.focusItemId = candidate.nativeId;
+          if (candidate.kind === "choice" && candidate.elements.length > 0) {
+            if (delta > 0) {
+              if (candidate.choiceType === 2) candidate.selectedIndex = 0;
+              else setChoiceSelected(candidate, 0, true);
+            } else {
+              var last = candidate.elements.length - 1;
+              if (candidate.choiceType === 2) candidate.selectedIndex = last;
+              else setChoiceSelected(candidate, last, true);
+            }
+          }
+          fireFormFocusChange(screen, candidate);
+          scrollFocusedIntoView();
+          syncSoftkeyLabels();
+          render();
+          return;
+        }
+        nextIdx += delta;
+      }
+      // If no next focusable item, scroll smoothly
+      screen.scrollY += delta * 24;
+      clampScroll(screen, getCanvasDims());
+      render();
+    }
+
+    function insertTextIntoFocused(txt) {
+      if (!isActive() || !txt) return false;
+      var screen = screens[activeScreenId];
+      var focused = screen && screen.focusItemId != null ? items[screen.focusItemId] : null;
+      if (!focused || focused.kind !== "textfield" || (focused.constraints & 131072)) {
+        return false;
+      }
+      var mode = focused.constraints & 65535;
+      var maxLen = focused.maxSize > 0 ? focused.maxSize : 512;
+      var cur = focused.text || "";
+      var changed = false;
+      for (var i = 0; i < txt.length; i++) {
+        var ch = txt[i];
+        if (mode === 2 && !/[0-9\-]/.test(ch)) continue;
+        if (mode === 3 && !/[0-9+*#]/.test(ch)) continue;
+        if (mode === 5 && !/[0-9.\-]/.test(ch)) continue;
+        if (cur.length >= maxLen) break;
+        cur += ch;
+        changed = true;
+      }
+      if (changed) {
+        focused.text = cur;
+        focused.caret = cur.length;
+        caretBlinkOn = true;
+        fireItemPeerChange(screen, focused, 0);
+        render();
+      }
+      return true;
+    }
+
+    function handleKeyPress(keyCode) {
+      if (!isActive()) return false;
+      var screen = screens[activeScreenId];
+
+      if (commandsState.menuOpen) {
+        if (keyCode === -1 || keyCode === 50) {
+          commandsState.menuIndex = (commandsState.menuIndex - 1 + commandsState.menuItems.length) % commandsState.menuItems.length;
+          render();
+          return true;
+        }
+        if (keyCode === -2 || keyCode === 56) {
+          commandsState.menuIndex = (commandsState.menuIndex + 1) % commandsState.menuItems.length;
+          render();
+          return true;
+        }
+        if (keyCode === -5 || keyCode === -6 || keyCode === 53 || keyCode === 13) {
+          executeMenuItem(commandsState.menuIndex);
+          return true;
+        }
+        if (keyCode === -7 || keyCode === -11 || keyCode === 8) {
+          commandsState.menuOpen = false;
+          syncSoftkeyLabels();
+          render();
+          return true;
+        }
+        return true;
+      }
+
+      if (keyCode === -6) {
+        triggerSoftkey("left");
+        return true;
+      }
+      if (keyCode === -7) {
+        triggerSoftkey("right");
+        return true;
+      }
+      if (keyCode === -11) {
+        // End / Escape triggers negative command if present
+        if (commandsState.left && isNegativeType(commandsState.left.commandType)) {
+          executeCommand(commandsState.left);
+        } else if (commandsState.right && isNegativeType(commandsState.right.commandType)) {
+          executeCommand(commandsState.right);
+        }
+        return true;
+      }
+
+      if (screen.kind === "alert") {
+        if (keyCode === -5 || keyCode === 13 || keyCode === 32) {
+          if (commandsState.left) executeCommand(commandsState.left);
+          else if (commandsState.right) executeCommand(commandsState.right);
+        }
+        return true;
+      }
+
+      var focused = screen.focusItemId != null ? items[screen.focusItemId] : null;
+
+      // Backspace / Clear deletes char when TextField is focused
+      if (keyCode === 8 && focused && focused.kind === "textfield" && !(focused.constraints & 131072)) {
+        if (focused.text.length > 0) {
+          focused.text = focused.text.slice(0, -1);
+          focused.caret = focused.text.length;
+          caretBlinkOn = true;
+          fireItemPeerChange(screen, focused, 0);
+          render();
+        }
+        return true;
+      }
+
+      // Printable character keys when TextField is focused
+      if (focused && focused.kind === "textfield" && !(focused.constraints & 131072)) {
+        if (keyCode >= 32) {
+          insertTextIntoFocused(String.fromCharCode(keyCode));
+          return true;
+        }
+      }
+
+      if (keyCode === -1) {
+        moveFocusInForm(screen, -1);
+        return true;
+      }
+      if (keyCode === -2) {
+        moveFocusInForm(screen, 1);
+        return true;
+      }
+      if (keyCode === -3 || keyCode === -4) {
+        var dir = keyCode === -4 ? 1 : -1;
+        if (focused && focused.kind === "choice" && focused.choiceType === 4 && focused.elements.length > 0) {
+          var nx = (focused.selectedIndex + dir + focused.elements.length) % focused.elements.length;
+          setChoiceSelected(focused, nx, true);
+          fireItemPeerChange(screen, focused, 0);
+          render();
+        } else if (focused && focused.kind === "gauge" && focused.interactive && focused.maxValue > 0) {
+          focused.value = Math.max(0, Math.min(focused.maxValue, focused.value + dir));
+          fireItemPeerChange(screen, focused, 0);
+          render();
+        }
+        return true;
+      }
+      if (keyCode === -5 || keyCode === 13) {
+        if (focused && focused.kind === "choice") {
+          if (focused.choiceType === 2 && focused.selectedIndex >= 0 && focused.selectedIndex < focused.elements.length) {
+            focused.elements[focused.selectedIndex].selected = !focused.elements[focused.selectedIndex].selected;
+            fireItemPeerChange(screen, focused, 0);
+            render();
+          } else if (focused.choiceType === 1 && focused.selectedIndex >= 0) {
+            setChoiceSelected(focused, focused.selectedIndex, true);
+            fireItemPeerChange(screen, focused, 0);
+            render();
+          } else if (focused.choiceType === 4 && focused.elements.length > 0) {
+            var nx4 = (focused.selectedIndex + 1) % focused.elements.length;
+            setChoiceSelected(focused, nx4, true);
+            fireItemPeerChange(screen, focused, 0);
+            render();
+          } else if (focused.choiceType === 3) {
+            fireItemPeerChange(screen, focused, 0);
+          }
+        } else if (focused && (focused.kind === "string" || focused.kind === "image") && focused.appearanceMode > 0) {
+          fireItemPeerChange(screen, focused, 0);
+        } else if (focused && focused.kind === "textfield") {
+          if (commandsState.right && !isNegativeType(commandsState.right.commandType)) {
+            executeCommand(commandsState.right);
+          } else if (commandsState.left && !isNegativeType(commandsState.left.commandType)) {
+            executeCommand(commandsState.left);
+          }
+        }
+        return true;
+      }
+
+      return true;
+    }
+
+    function handlePointer(x, y, whichType) {
+      if (!isActive()) return;
+      if (whichType === 1) {
+        for (var i = hitRegions.length - 1; i >= 0; i--) {
+          var r = hitRegions[i];
+          if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+            r.onTap();
+            return;
+          }
+        }
+        if (commandsState.menuOpen) {
+          commandsState.menuOpen = false;
+          syncSoftkeyLabels();
+          render();
+        }
+      }
+    }
+
+    return {
+      isActive: isActive,
+      render: render,
+      handleKeyPress: handleKeyPress,
+      handlePointer: handlePointer,
+      insertText: insertTextIntoFocused,
+      onDisplayTitle: function(t) {
+        if (activeScreenId && screens[activeScreenId]) {
+          screens[activeScreenId].title = t;
+          notifyParentTitle(t);
+          render();
+        }
+      },
+      getTextFieldValue: function(nativeId) {
+        var it = items[nativeId];
+        return it && it.kind === "textfield" ? (it.text || "") : "";
+      },
+      createScreen: function(kind, title, ticker, extra) {
+        var id = nextMidpDisplayableId++;
+        screens[id] = {
+          kind: kind,
+          nativeId: id,
+          title: title || "",
+          ticker: ticker || "",
+          itemIds: [],
+          focusItemId: null,
+          scrollY: 0,
+          modelVersion: 0,
+          visible: false,
+          alertType: extra && extra.alertType || 0,
+          alertText: extra && extra.alertText || "",
+          alertImageCanvas: extra && extra.alertImageCanvas || null,
+          indicatorId: null
         };
-        menu.appendChild(li);
-        isSidebarEmpty = false;
-      });
+        curDisplayableId = id;
+        if (kind === "canvas") {
+          activeScreenId = null;
+          commandsState.menuOpen = false;
+          syncSoftkeyLabels();
+        }
+        return id;
+      },
+      deleteScreen: function(nativeId) {
+        var s = screens[nativeId];
+        if (s) {
+          delete screens[nativeId];
+        }
+        if (activeScreenId === nativeId) {
+          activeScreenId = null;
+          commandsState.menuOpen = false;
+          syncSoftkeyLabels();
+        }
+      },
+      setTitle: function(nativeId, title) {
+        if (screens[nativeId]) {
+          screens[nativeId].title = title;
+          if (activeScreenId === nativeId) {
+            notifyParentTitle(title);
+            render();
+          }
+        }
+      },
+      setTicker: function(nativeId, ticker) {
+        if (screens[nativeId]) {
+          screens[nativeId].ticker = ticker;
+          if (activeScreenId === nativeId) render();
+        }
+      },
+      showForm: function(nativeId, modelVersion) {
+        var s = screens[nativeId];
+        if (!s) return;
+        s.modelVersion = modelVersion | 0;
+        s.visible = true;
+        activeScreenId = nativeId;
+        curDisplayableId = nativeId;
+        commandsState.menuOpen = false;
+        notifyParentTitle(s.title);
+        startBlink();
+        syncSoftkeyLabels();
+        render();
+      },
+      setAlertContents: function(nativeId, imgCanvas, text) {
+        var s = screens[nativeId];
+        if (!s) return;
+        s.alertImageCanvas = imgCanvas;
+        s.alertText = text || "";
+        if (activeScreenId === nativeId) render();
+      },
+      showAlert: function(nativeId) {
+        var s = screens[nativeId];
+        if (!s) return;
+        s.visible = true;
+        activeScreenId = nativeId;
+        curDisplayableId = nativeId;
+        commandsState.menuOpen = false;
+        notifyParentTitle(s.title);
+        syncSoftkeyLabels();
+        render();
+      },
+      getScrollPos: function() {
+        var s = activeScreenId ? screens[activeScreenId] : null;
+        return s ? (s.scrollY | 0) : 0;
+      },
+      setScrollPos: function(pos) {
+        var s = activeScreenId ? screens[activeScreenId] : null;
+        if (!s) return;
+        s.scrollY = Math.max(0, pos | 0);
+        clampScroll(s, getCanvasDims());
+        render();
+      },
+      getViewportHeight: function() {
+        return Math.max(40, getCanvasDims().h - HEADER_H - FOOTER_H);
+      },
+      createItem: function(ownerId, kind, props) {
+        var id = nextMidpDisplayableId++;
+        var it = {
+          nativeId: id,
+          ownerId: ownerId,
+          kind: kind,
+          label: props.label || "",
+          layout: props.layout || 0,
+          visible: false,
+          bounds: { x: 0, y: 0, w: 0, h: 0 }
+        };
+        for (var k in props) {
+          if (Object.prototype.hasOwnProperty.call(props, k)) {
+            it[k] = props[k];
+          }
+        }
+        items[id] = it;
+        var owner = screens[ownerId];
+        if (owner) {
+          if (owner.kind === "alert" && kind === "gauge") {
+            owner.indicatorId = id;
+          } else if (owner.itemIds.indexOf(id) === -1) {
+            owner.itemIds.push(id);
+          }
+        }
+        return id;
+      },
+      deleteItem: function(nativeId) {
+        var it = items[nativeId];
+        if (!it) return;
+        var owner = screens[it.ownerId];
+        if (owner) {
+          var idx = owner.itemIds.indexOf(nativeId);
+          if (idx !== -1) owner.itemIds.splice(idx, 1);
+          if (owner.indicatorId === nativeId) owner.indicatorId = null;
+          if (owner.focusItemId === nativeId) owner.focusItemId = null;
+        }
+        delete items[nativeId];
+        if (isActive()) render();
+      },
+      getItem: function(nativeId) {
+        return items[nativeId] || null;
+      },
+      measureMinWidth: function(nativeId) {
+        return Math.min(180, Math.max(60, getCanvasDims().w - 16));
+      },
+      measureMinHeight: function(nativeId) {
+        var it = items[nativeId];
+        if (!it) return 24;
+        return Math.min(48, measureItemHeight(it, getCanvasDims().w));
+      },
+      measurePrefWidth: function(nativeId) {
+        return Math.max(80, getCanvasDims().w - 8);
+      },
+      measurePrefHeight: function(nativeId) {
+        var it = items[nativeId];
+        if (!it) return 28;
+        return measureItemHeight(it, getCanvasDims().w);
+      },
+      setChoiceSelected: setChoiceSelected,
+      updateCommands: function(itemCommandsAddr, numItemCommands, commandsAddr, numCommands) {
+        var list = [];
+        function collect(arrAddr, count, isItem) {
+          if (!arrAddr || arrAddr === J2ME.Constants.NULL || !count) return;
+          var arr = J2ME.getArrayFromAddr(arrAddr);
+          for (var i = 0; i < count && i < arr.length; i++) {
+            if (!arr[i]) continue;
+            var cmd = getHandle(arr[i]);
+            list.push({
+              id: cmd.id | 0,
+              shortLabel: safeStr(cmd.shortLabel) || safeStr(cmd.longLabel) || "OK",
+              longLabel: safeStr(cmd.longLabel) || safeStr(cmd.shortLabel) || "OK",
+              commandType: cmd.commandType | 0,
+              priority: cmd.priority | 0,
+              isItem: isItem
+            });
+          }
+        }
+        collect(itemCommandsAddr, numItemCommands | 0, true);
+        collect(commandsAddr, numCommands | 0, false);
 
-      var name = prompt(mytitle, mytitle);
-      if (name != null) { 
-        mycontent=name;
-        sendEvent(okCommand)
-      }else{
-        sendEvent(backCommand) 
-      } 
-    //   document.getElementById("header-drawer-button").style.display = isSidebarEmpty ? "none" : "block";
-    //   var headerBtn = document.getElementById("header-ok-button");
-    //   if (okCommand) {
-    //     headerBtn.style.display = "block";
-    //     headerBtn.onclick = sendEvent.bind(headerBtn, okCommand);
-    //   } else {
-    //     headerBtn.style.display = "none";
-    //   }
-    //   var backBtn = document.getElementById("back-button");
-    //   if (backCommand) {
-    //     backBtn.style.display = "block";
-    //     backBtn.onclick = sendEvent.bind(backBtn, backCommand);
-    //   } else {
-    //     backBtn.style.display = "none";
-    //   }
-   }
-  }catch(err){
-    console.log("updateCommands Error : "+err)
-  }
+        list.sort(function(a, b) { return a.priority - b.priority; });
+        commandsState.all = list;
+        commandsState.menuOpen = false;
 
+        var negCmds = list.filter(function(c) { return isNegativeType(c.commandType); });
+        var posCmds = list.filter(function(c) { return !isNegativeType(c.commandType); });
+
+        if (list.length === 0) {
+          commandsState.left = null;
+          commandsState.right = null;
+          commandsState.menuItems = [];
+        } else if (list.length === 1) {
+          if (negCmds.length === 1) {
+            commandsState.left = negCmds[0];
+            commandsState.right = null;
+          } else {
+            commandsState.left = null;
+            commandsState.right = posCmds[0];
+          }
+          commandsState.menuItems = [];
+        } else if (list.length === 2) {
+          if (negCmds.length === 1 && posCmds.length === 1) {
+            commandsState.left = negCmds[0];
+            commandsState.right = posCmds[0];
+          } else {
+            commandsState.left = list[0];
+            commandsState.right = list[1];
+          }
+          commandsState.menuItems = [];
+        } else {
+          if (negCmds.length > 0) {
+            commandsState.left = negCmds[0];
+            commandsState.menuItems = list.filter(function(c) { return c !== commandsState.left; });
+            commandsState.right = { shortLabel: "Tùy chọn", isMenuTrigger: true };
+          } else {
+            commandsState.left = null;
+            commandsState.menuItems = list.slice();
+            commandsState.right = { shortLabel: "Tùy chọn", isMenuTrigger: true };
+          }
+        }
+
+        syncSoftkeyLabels();
+        if (isActive()) render();
+      },
+      showMenu: function() {
+        if (commandsState.menuItems.length > 0) {
+          commandsState.menuOpen = true;
+          commandsState.menuIndex = 0;
+          syncSoftkeyLabels();
+          render();
+        }
+      },
+      dismissMenu: function() {
+        commandsState.menuOpen = false;
+        syncSoftkeyLabels();
+        if (isActive()) render();
+      },
+      safeStr: safeStr,
+      readDynamicCharArray: readDynamicCharArray,
+      getImageCanvas: getImageCanvas
+    };
+  })();
+
+  window.__j2meLcdui = LCDUI;
+
+  Native["javax/microedition/lcdui/DisplayableLFImpl.initialize0.()V"] = function(addr) {
+  };
+  Native["javax/microedition/lcdui/DisplayableLFImpl.finalize.()V"] = function(addr) {
+  };
+  Native["javax/microedition/lcdui/DisplayableLFImpl.deleteNativeResource0.(I)V"] = function(addr, nativeId) {
+    LCDUI.deleteScreen(nativeId);
+  };
+  Native["javax/microedition/lcdui/DisplayableLFImpl.setTitle0.(ILjava/lang/String;)V"] = function(addr, nativeId, titleAddr) {
+    var title = LCDUI.safeStr(titleAddr);
+    mytitle = title;
+    LCDUI.setTitle(nativeId, title);
+  };
+  Native["javax/microedition/lcdui/DisplayableLFImpl.setTicker0.(ILjava/lang/String;)V"] = function(addr, nativeId, tickerAddr) {
+    LCDUI.setTicker(nativeId, LCDUI.safeStr(tickerAddr));
+  };
+  Native["javax/microedition/lcdui/CanvasLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;)I"] = function(addr, titleAddr, tickerAddr) {
+    return LCDUI.createScreen("canvas", LCDUI.safeStr(titleAddr), LCDUI.safeStr(tickerAddr));
+  };
+  Native["javax/microedition/lcdui/AlertLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;I)I"] = function(addr, titleAddr, tickerAddr, type) {
+    return LCDUI.createScreen("alert", LCDUI.safeStr(titleAddr), LCDUI.safeStr(tickerAddr), { alertType: type });
+  };
+  Native["javax/microedition/lcdui/AlertLFImpl.setNativeContents0.(ILjavax/microedition/lcdui/ImageData;[ILjava/lang/String;)Z"] = function(addr, nativeId, imgIdAddr, indicatorBoundsAddr, textAddr) {
+    LCDUI.setAlertContents(nativeId, LCDUI.getImageCanvas(imgIdAddr), LCDUI.safeStr(textAddr));
+    return 0;
+  };
+  Native["javax/microedition/lcdui/AlertLFImpl.showNativeResource0.(I)V"] = function(addr, nativeId) {
+    LCDUI.showAlert(nativeId);
+  };
+  Native["javax/microedition/lcdui/GaugeLFImpl.createNativeResource0.(ILjava/lang/String;IZII)I"] = function(addr, ownerId, labelAddr, layout, interactive, maxValue, initialValue) {
+    return LCDUI.createItem(ownerId, "gauge", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout,
+      interactive: !!interactive,
+      maxValue: maxValue,
+      value: initialValue
+    });
+  };
+  Native["javax/microedition/lcdui/GaugeLFImpl.setValue0.(III)V"] = function(addr, nativeId, value, maxValue) {
+    var it = LCDUI.getItem(nativeId);
+    if (it) {
+      it.value = value;
+      it.maxValue = maxValue;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/TextFieldLFImpl.createNativeResource0.(ILjava/lang/String;ILcom/sun/midp/lcdui/DynamicCharacterArray;ILjava/lang/String;)I"] = function(addr, ownerId, labelAddr, layout, bufferAddr, constraints, initialInputModeAddr) {
+    var txt = LCDUI.readDynamicCharArray(bufferAddr);
+    var maxSize = 256;
+    try {
+      var bufObj = bufferAddr && bufferAddr !== J2ME.Constants.NULL ? getHandle(bufferAddr) : null;
+      if (bufObj && bufObj.buffer && bufObj.buffer !== J2ME.Constants.NULL) {
+        maxSize = Math.max(1, J2ME.getArrayFromAddr(bufObj.buffer).length);
+      }
+    } catch (e) {}
+    return LCDUI.createItem(ownerId, "textfield", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout,
+      text: txt,
+      caret: txt.length,
+      maxSize: maxSize,
+      constraints: constraints | 0,
+      initialInputMode: LCDUI.safeStr(initialInputModeAddr)
+    });
+  };
+  Native["javax/microedition/lcdui/TextFieldLFImpl.setString0.(ILcom/sun/midp/lcdui/DynamicCharacterArray;)V"] = function(addr, nativeId, bufferAddr) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "textfield") {
+      it.text = LCDUI.readDynamicCharArray(bufferAddr);
+      it.caret = it.text.length;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/TextFieldLFImpl.setMaxSize0.(II)V"] = function(addr, nativeId, maxSize) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "textfield") {
+      it.maxSize = maxSize | 0;
+      if (it.text.length > it.maxSize) {
+        it.text = it.text.slice(0, it.maxSize);
+      }
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/TextFieldLFImpl.getCaretPosition0.(I)I"] = function(addr, nativeId) {
+    var it = LCDUI.getItem(nativeId);
+    return it && it.kind === "textfield" ? (it.text || "").length : 0;
+  };
+  Native["javax/microedition/lcdui/TextFieldLFImpl.setConstraints0.(II)V"] = function(addr, nativeId, constraints) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "textfield") {
+      it.constraints = constraints | 0;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/ImageItemLFImpl.createNativeResource0.(ILjava/lang/String;ILjavax/microedition/lcdui/ImageData;Ljava/lang/String;I)I"] = function(addr, ownerId, labelAddr, layout, imageDataAddr, altTextAddr, appearanceMode) {
+    return LCDUI.createItem(ownerId, "image", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout,
+      imageCanvas: LCDUI.getImageCanvas(imageDataAddr),
+      altText: LCDUI.safeStr(altTextAddr),
+      appearanceMode: appearanceMode | 0
+    });
+  };
+  Native["javax/microedition/lcdui/ImageItemLFImpl.setContent0.(ILjavax/microedition/lcdui/ImageData;Ljava/lang/String;I)V"] = function(addr, nativeId, imageDataAddr, altTextAddr, appearanceMode) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "image") {
+      it.imageCanvas = LCDUI.getImageCanvas(imageDataAddr);
+      it.altText = LCDUI.safeStr(altTextAddr);
+      it.appearanceMode = appearanceMode | 0;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/DateFieldLFImpl.createNativeResource0.(ILjava/lang/String;IJILjava/lang/String;)I"] = function(addr, ownerId, labelAddr, layout, dateLow, dateHigh, inputMode, tzAddr) {
+    return LCDUI.createItem(ownerId, "date", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout,
+      dateMillis: J2ME.longToNumber(dateLow, dateHigh),
+      inputMode: inputMode | 0
+    });
+  };
+  Native["javax/microedition/lcdui/DateFieldLFImpl.setDate0.(IJ)V"] = function(addr, nativeId, dateLow, dateHigh) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "date") {
+      it.dateMillis = J2ME.longToNumber(dateLow, dateHigh);
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/DateFieldLFImpl.getDate0.(I)J"] = function(addr, nativeId) {
+    var it = LCDUI.getItem(nativeId);
+    return J2ME.returnLongValue(it && it.kind === "date" ? (it.dateMillis || 0) : 0);
+  };
+  Native["javax/microedition/lcdui/DateFieldLFImpl.setInputMode0.(II)V"] = function(addr, nativeId, inputMode) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "date") {
+      it.inputMode = inputMode | 0;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/CustomItemLFImpl.createNativeResource0.(ILjava/lang/String;I)I"] = function(addr, ownerId, labelAddr, layout) {
+    return LCDUI.createItem(ownerId, "custom", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout
+    });
+  };
+  Native["javax/microedition/lcdui/CustomItemLFImpl.refresh0.(IIIII)V"] = function() {};
+  Native["javax/microedition/lcdui/CustomItemLFImpl.getLabelHeight0.(II)I"] = function() { return 16; };
+  Native["javax/microedition/lcdui/CustomItemLFImpl.getLabelWidth0.(II)I"] = function() { return 60; };
+  Native["javax/microedition/lcdui/CustomItemLFImpl.getItemPad0.(I)I"] = function() { return 4; };
+  Native["javax/microedition/lcdui/CustomItemLFImpl.setContentBuffer0.(ILjavax/microedition/lcdui/ImageData;)V"] = function() {};
+  Native["javax/microedition/lcdui/FormLFImpl.setScrollPosition0.(I)V"] = function(addr, pos) {
+    LCDUI.setScrollPos(pos);
+  };
+  Native["javax/microedition/lcdui/FormLFImpl.getScrollPosition0.()I"] = function(addr) {
+    return LCDUI.getScrollPos();
+  };
+  Native["javax/microedition/lcdui/FormLFImpl.createNativeResource0.(Ljava/lang/String;Ljava/lang/String;)I"] = function(addr, titleAddr, tickerAddr) {
+    return LCDUI.createScreen("form", LCDUI.safeStr(titleAddr), LCDUI.safeStr(tickerAddr));
+  };
+  Native["javax/microedition/lcdui/FormLFImpl.showNativeResource0.(IIII)V"] = function(addr, nativeId, modelVersion, w, h) {
+    LCDUI.showForm(nativeId, modelVersion);
+  };
+  Native["javax/microedition/lcdui/FormLFImpl.getViewportHeight0.()I"] = function(addr) {
+    return LCDUI.getViewportHeight();
+  };
+  Native["javax/microedition/lcdui/FormLFImpl.setCurrentItem0.(III)V"] = function(addr, formNativeId, itemNativeId, yOffset) {
+    if (LCDUI.isActive()) LCDUI.render();
+  };
+  Native["javax/microedition/lcdui/StringItemLFImpl.createNativeResource0.(ILjava/lang/String;ILjava/lang/String;ILjavax/microedition/lcdui/Font;)I"] = function(addr, ownerId, labelAddr, layout, strAddr, appearanceMode, fontAddr) {
+    return LCDUI.createItem(ownerId, "string", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout,
+      text: LCDUI.safeStr(strAddr),
+      appearanceMode: appearanceMode | 0
+    });
+  };
+  Native["javax/microedition/lcdui/StringItemLFImpl.setContent0.(ILjava/lang/String;I)V"] = function(addr, nativeId, strAddr, appearanceMode) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "string") {
+      it.text = LCDUI.safeStr(strAddr);
+      it.appearanceMode = appearanceMode | 0;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/StringItemLFImpl.setFont0.(IIII)V"] = function() {};
+  Native["javax/microedition/lcdui/ItemLFImpl.setSize0.(III)V"] = function(addr, nativeId, w, h) {
+    var it = LCDUI.getItem(nativeId);
+    if (it) {
+      it.bounds.w = w;
+      it.bounds.h = h;
+    }
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.setLocation0.(III)V"] = function(addr, nativeId, x, y) {
+    var it = LCDUI.getItem(nativeId);
+    if (it) {
+      it.bounds.x = x;
+      it.bounds.y = y;
+    }
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.show0.(I)V"] = function(addr, nativeId) {
+    var it = LCDUI.getItem(nativeId);
+    if (it) {
+      it.visible = true;
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.hide0.(I)V"] = function(addr, nativeId) {
+    var it = LCDUI.getItem(nativeId);
+    if (it) {
+      it.visible = false;
+    }
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.setLabel0.(ILjava/lang/String;)V"] = function(addr, nativeId, labelAddr) {
+    var it = LCDUI.getItem(nativeId);
+    if (it) {
+      it.label = LCDUI.safeStr(labelAddr);
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.createNativeResource0.(ILjava/lang/String;III[Ljavax/microedition/lcdui/ChoiceGroup$CGElement;II)I"] = function(addr, ownerId, labelAddr, layout, choiceType, fitPolicy, cgElementsAddr, numOfEls, selectedIndex) {
+    var elements = [];
+    var count = numOfEls | 0;
+    if (cgElementsAddr && cgElementsAddr !== J2ME.Constants.NULL && count > 0) {
+      var arr = J2ME.getArrayFromAddr(cgElementsAddr);
+      for (var i = 0; i < count && i < arr.length; i++) {
+        if (!arr[i]) continue;
+        var cgEl = getHandle(arr[i]);
+        elements.push({
+          text: LCDUI.safeStr(cgEl.stringEl),
+          selected: !!cgEl.selected,
+          imageCanvas: LCDUI.getImageCanvas(cgEl.imageDataEl)
+        });
+      }
+    }
+    var selIdx = selectedIndex | 0;
+    if (elements.length > 0 && selIdx < 0 && (choiceType === 1 || choiceType === 3 || choiceType === 4)) {
+      selIdx = 0;
+      elements[0].selected = true;
+    }
+    return LCDUI.createItem(ownerId, "choice", {
+      label: LCDUI.safeStr(labelAddr),
+      layout: layout | 0,
+      choiceType: choiceType | 0,
+      fitPolicy: fitPolicy | 0,
+      elements: elements,
+      selectedIndex: selIdx
+    });
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.insert0.(IILjava/lang/String;Ljavax/microedition/lcdui/ImageData;Z)V"] = function(addr, nativeId, elementNum, strAddr, imgDataAddr, selected) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return;
+    var idx = Math.max(0, Math.min(it.elements.length, elementNum | 0));
+    it.elements.splice(idx, 0, {
+      text: LCDUI.safeStr(strAddr),
+      selected: !!selected,
+      imageCanvas: LCDUI.getImageCanvas(imgDataAddr)
+    });
+    if (selected || (it.selectedIndex < 0 && (it.choiceType === 1 || it.choiceType === 3 || it.choiceType === 4))) {
+      LCDUI.setChoiceSelected(it, idx, true);
+    } else if (idx <= it.selectedIndex) {
+      it.selectedIndex++;
+    }
+    if (LCDUI.isActive()) LCDUI.render();
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.delete0.(III)V"] = function(addr, nativeId, elementNum, newSelectedIndex) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return;
+    var idx = elementNum | 0;
+    if (idx >= 0 && idx < it.elements.length) {
+      it.elements.splice(idx, 1);
+    }
+    it.selectedIndex = newSelectedIndex | 0;
+    if (it.elements.length > 0 && it.selectedIndex >= 0 && it.selectedIndex < it.elements.length && (it.choiceType === 1 || it.choiceType === 3 || it.choiceType === 4)) {
+      LCDUI.setChoiceSelected(it, it.selectedIndex, true);
+    }
+    if (LCDUI.isActive()) LCDUI.render();
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.deleteAll0.(I)V"] = function(addr, nativeId) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return;
+    it.elements = [];
+    it.selectedIndex = -1;
+    if (LCDUI.isActive()) LCDUI.render();
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.set0.(IILjava/lang/String;Ljavax/microedition/lcdui/ImageData;Z)V"] = function(addr, nativeId, elementNum, strAddr, imgDataAddr, selected) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return;
+    var idx = elementNum | 0;
+    if (idx >= 0 && idx < it.elements.length) {
+      it.elements[idx] = {
+        text: LCDUI.safeStr(strAddr),
+        selected: !!selected,
+        imageCanvas: LCDUI.getImageCanvas(imgDataAddr)
+      };
+      if (selected) LCDUI.setChoiceSelected(it, idx, true);
+      if (LCDUI.isActive()) LCDUI.render();
+    }
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.setSelectedIndex0.(IIZ)V"] = function(addr, nativeId, elementNum, selected) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return;
+    LCDUI.setChoiceSelected(it, elementNum | 0, !!selected);
+    if (LCDUI.isActive()) LCDUI.render();
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.setSelectedFlags0.(I[ZI)V"] = function(addr, nativeId, selectedArrayAddr, numOfEls) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice" || !selectedArrayAddr || selectedArrayAddr === J2ME.Constants.NULL) return;
+    var arr = J2ME.getArrayFromAddr(selectedArrayAddr);
+    var count = Math.min(numOfEls | 0, it.elements.length, arr.length);
+    for (var i = 0; i < count; i++) {
+      it.elements[i].selected = !!arr[i];
+    }
+    if (LCDUI.isActive()) LCDUI.render();
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.setFitPolicy0.(II)V"] = function(addr, nativeId, fitPolicy) {
+    var it = LCDUI.getItem(nativeId);
+    if (it && it.kind === "choice") it.fitPolicy = fitPolicy | 0;
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.setFont0.(IIIII)V"] = function() {};
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.getSelectedIndex0.(I)I"] = function(addr, nativeId) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return -1;
+    if (it.choiceType === 2) return -1;
+    return it.selectedIndex >= 0 && it.selectedIndex < it.elements.length ? it.selectedIndex : -1;
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.getSelectedFlags0.(I[ZI)I"] = function(addr, nativeId, selectedArrayAddr, numOfEls) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice" || !selectedArrayAddr || selectedArrayAddr === J2ME.Constants.NULL) return 0;
+    var arr = J2ME.getArrayFromAddr(selectedArrayAddr);
+    var count = Math.min(numOfEls | 0, it.elements.length, arr.length);
+    var numSelected = 0;
+    for (var i = 0; i < count; i++) {
+      var sel = !!it.elements[i].selected;
+      arr[i] = sel ? 1 : 0;
+      if (sel) numSelected++;
+    }
+    for (var j = count; j < arr.length; j++) {
+      arr[j] = 0;
+    }
+    return numSelected;
+  };
+  Native["javax/microedition/lcdui/ChoiceGroupLFImpl.isSelected0.(II)Z"] = function(addr, nativeId, elementNum) {
+    var it = LCDUI.getItem(nativeId);
+    if (!it || it.kind !== "choice") return 0;
+    var el = it.elements[elementNum | 0];
+    return el && el.selected ? 1 : 0;
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.getMinimumWidth0.(I)I"] = function(addr, nativeId) {
+    return LCDUI.measureMinWidth(nativeId);
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.getMinimumHeight0.(I)I"] = function(addr, nativeId) {
+    return LCDUI.measureMinHeight(nativeId);
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.getPreferredWidth0.(II)I"] = function(addr, nativeId, h) {
+    return LCDUI.measurePrefWidth(nativeId);
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.getPreferredHeight0.(II)I"] = function(addr, nativeId, w) {
+    return LCDUI.measurePrefHeight(nativeId);
+  };
+  Native["javax/microedition/lcdui/ItemLFImpl.delete0.(I)V"] = function(addr, nativeId) {
+    LCDUI.deleteItem(nativeId);
+  };
+  Native["javax/microedition/lcdui/NativeMenu.updateCommands.([Ljavax/microedition/lcdui/Command;I[Ljavax/microedition/lcdui/Command;I)V"] = function(addr, itemCommandsAddr, numItemCommands, commandsAddr, numCommands) {
+    LCDUI.updateCommands(itemCommandsAddr, numItemCommands, commandsAddr, numCommands);
+  };
+  Native["javax/microedition/lcdui/NativeMenu.showMenu.()V"] = function(addr) {
+    LCDUI.showMenu();
+  };
+  Native["javax/microedition/lcdui/NativeMenu.dismissMenuAndPopup.()V"] = function(addr) {
+    LCDUI.dismissMenu();
   };
 })(Native);
 var TextEditorProvider = function() {
@@ -10208,7 +11592,6 @@ var TextEditorProvider = function() {
   }, deactivate:function() {
     this.textEditorElem.oninput = null;
   }, getContent:function() {
-	return mycontent;
     return this.content;
   }, setContent:function(content) {
     this.content = content;

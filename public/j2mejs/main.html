@@ -171,6 +171,29 @@
           } catch (err) {
             console.warn("Pointer dispatch error:", err);
           }
+        } else if (d.type === "text" && typeof MIDP !== "undefined") {
+          try {
+            var textStr = typeof d.text === "string" ? d.text : "";
+            if (textStr && window.__j2meLcdui && window.__j2meLcdui.isActive()) {
+              window.__j2meLcdui.insertText(textStr);
+            } else if (textStr && typeof MIDP.sendKeyPress === "function" && typeof MIDP.sendKeyRelease === "function") {
+              (function dispatchChars(str) {
+                var idx = 0;
+                function step() {
+                  if (idx >= str.length) return;
+                  var code = str.charCodeAt(idx++);
+                  MIDP.sendKeyPress(code);
+                  setTimeout(function () {
+                    MIDP.sendKeyRelease(code);
+                    if (idx < str.length) setTimeout(step, 35);
+                  }, 45);
+                }
+                step();
+              })(textStr);
+            }
+          } catch (err) {
+            console.warn("Text dispatch error:", err);
+          }
         } else if (d.type === "mute") {
           isMuted = !!d.muted;
           try {

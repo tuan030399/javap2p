@@ -9631,7 +9631,25 @@ var J2ME;
                     "id": "I",
                     "commandType": "I",
                     "shortLabel": "Ljava/lang/String;",
+                    "longLabel": "Ljava/lang/String;",
                     "priority": "I",
+                }
+            }
+        },
+        "javax/microedition/lcdui/ChoiceGroup$CGElement": {
+            fields: {
+                instanceSymbols: {
+                    "stringEl": "Ljava/lang/String;",
+                    "imageDataEl": "Ljavax/microedition/lcdui/ImageData;",
+                    "selected": "Z",
+                }
+            }
+        },
+        "com/sun/midp/lcdui/DynamicCharacterArray": {
+            fields: {
+                instanceSymbols: {
+                    "buffer": "[C",
+                    "length": "I",
                 }
             }
         },

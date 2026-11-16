@@ -120,11 +120,13 @@ export default function App() {
   });
   const [appMode, setAppMode] = useState<AppMode>('menu');
   const [roomCode] = useState<string>(() => `JAVA-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [copiedRoom, setCopiedRoom] = useState(false);
   const [vmState, setVmState] = useState<VmRuntimeState>(INITIAL_VM_STATE);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const emuIframeRef = useRef<HTMLIFrameElement | null>(null);
   const quickUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const hostWsRef = useRef<WebSocket | null>(null);
   const heldKeysRef = useRef<Set<number>>(new Set());
   const builtinEngineRef = useRef<JavaGameEngine | null>(null);
   const softkeysRef = useRef<SoftkeyLabels>(softkeys);
@@ -214,6 +216,17 @@ export default function App() {
         }));
       } else if (data.type === 'vm-title' && data.title) {
         setVmState((prev) => ({ ...prev, currentScreen: String(data.title) }));
+      } else if (data.type === 'softkeys') {
+        const nextSk: SoftkeyLabels = {
+          left: typeof data.left === 'string' ? data.left : '',
+          center: typeof data.center === 'string' ? data.center : '',
+          right: typeof data.right === 'string' ? data.right : '',
+        };
+        softkeysRef.current = nextSk;
+        setSoftkeys(nextSk);
+        if (hostWsRef.current && hostWsRef.current.readyState === WebSocket.OPEN) {
+          hostWsRef.current.send(JSON.stringify({ type: 'softkeys', ...nextSk }));
+        }
       } else if (data.type === 'vm-log' && data.message) {
         setVmState((prev) => ({
           ...prev,
@@ -395,6 +408,10 @@ export default function App() {
   const handleSendText = useCallback(
     (text: string) => {
       if (!text) return;
+      if (activeSource.type === 'jar' && jarEngine === 'j2mejs') {
+        emuIframeRef.current?.contentWindow?.postMessage({ type: 'text', text }, '*');
+        return;
+      }
       let i = 0;
       const interval = setInterval(() => {
         if (i >= text.length) {
@@ -409,7 +426,7 @@ export default function App() {
         }, 50);
       }, 90);
     },
-    [handlePressKey, handleReleaseKey]
+    [activeSource.type, jarEngine, handlePressKey, handleReleaseKey]
   );
 
   // Host streaming & remote control effect
@@ -418,12 +435,19 @@ export default function App() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${proto}//${location.host}/api/j2me-relay?role=host&room=${encodeURIComponent(roomCode)}`;
     const ws = new WebSocket(wsUrl);
+    hostWsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'softkeys', ...softkeysRef.current }));
+    };
 
     ws.onmessage = (event) => {
       if (typeof event.data === 'string') {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'key' && typeof msg.keyCode === 'number') {
+          if (msg.type === 'controller-joined') {
+            ws.send(JSON.stringify({ type: 'softkeys', ...softkeysRef.current }));
+          } else if (msg.type === 'key' && typeof msg.keyCode === 'number') {
             if (msg.down) {
               handlePressKey(msg.keyCode);
             } else {
@@ -471,6 +495,9 @@ export default function App() {
 
     return () => {
       clearInterval(interval);
+      if (hostWsRef.current === ws) {
+        hostWsRef.current = null;
+      }
       ws.close();
     };
   }, [appMode, roomCode, activeSource.type, handlePressKey, handleReleaseKey, handleSendText]);
@@ -572,12 +599,13 @@ export default function App() {
         <button
           type="button"
           onClick={() => {
-            navigator.clipboard.writeText(roomCode);
-            alert('Đã sao chép mã phòng: ' + roomCode);
+            navigator.clipboard?.writeText(roomCode).catch(() => {});
+            setCopiedRoom(true);
+            setTimeout(() => setCopiedRoom(false), 2000);
           }}
           className="rounded bg-amber-500/25 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/40 transition-colors"
         >
-          Sao chép mã phòng
+          {copiedRoom ? '✓ Đã sao chép' : 'Sao chép mã phòng'}
         </button>
         <button
           type="button"
