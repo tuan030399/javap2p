@@ -19,6 +19,28 @@ import { createSamplePlayableJar, inspectJarBuffer, parseManifestText } from './
 import { deleteUploadedJar, listUploadedJars, saveUploadedJar } from './utils/jarStorage';
 
 const VMS_STORAGE_KEY = 'javadeck_vms_v1';
+const APP_MODE_STORAGE_KEY = 'javadeck_app_mode_v1';
+const KEEP_AWAKE_STORAGE_KEY = 'javadeck_keep_awake_v1';
+
+function loadSavedAppMode(): AppMode {
+  try {
+    const raw = localStorage.getItem(APP_MODE_STORAGE_KEY);
+    if (raw === 'host' || raw === 'controller' || raw === 'menu') {
+      return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return 'menu';
+}
+
+function loadSavedKeepAwake(): boolean {
+  try {
+    return localStorage.getItem(KEEP_AWAKE_STORAGE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 function generateRoomCode(): string {
   return `JAVA-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -44,8 +66,9 @@ function loadSavedVms(): PersistedVmConfig[] {
 }
 
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>('menu');
+  const [appMode, setAppMode] = useState<AppMode>(() => loadSavedAppMode());
   const [activeTab, setActiveTab] = useState<WorkbenchTab>('vms');
+  const [keepAwakeEnabled, setKeepAwakeEnabled] = useState<boolean>(() => loadSavedKeepAwake());
   const [uploadedJars, setUploadedJars] = useState<UploadedJarRecord[]>([]);
   const [vms, setVms] = useState<PersistedVmConfig[]>(() => loadSavedVms());
   const [openedVmId, setOpenedVmId] = useState<string | null>(null);
@@ -53,6 +76,22 @@ export default function App() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createPreselectedJarId, setCreatePreselectedJarId] = useState<string | null>(null);
   const [vmStatuses, setVmStatuses] = useState<Record<string, VmStatusSummary>>({});
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(APP_MODE_STORAGE_KEY, appMode);
+    } catch {
+      // ignore
+    }
+  }, [appMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KEEP_AWAKE_STORAGE_KEY, keepAwakeEnabled ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [keepAwakeEnabled]);
 
   // Load persisted .JAR library from IndexedDB on mount
   useEffect(() => {
@@ -254,6 +293,109 @@ export default function App() {
 
   const runningCount = useMemo(() => vms.filter((v) => v.isRunning).length, [vms]);
 
+  // Keep server & browser tab awake when VMs are running
+  useEffect(() => {
+    if (appMode !== 'host' || runningCount === 0) return;
+
+    const pingHealth = () => {
+      fetch('/api/health', { cache: 'no-store' }).catch(() => {});
+    };
+
+    pingHealth();
+    const httpTimer = setInterval(pingHealth, 120_000);
+
+    // Web Worker timer is less aggressively throttled in background tabs
+    let worker: Worker | null = null;
+    try {
+      const workerCode = 'setInterval(() => postMessage("tick"), 90000);';
+      const blobUrl = URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' }));
+      worker = new Worker(blobUrl);
+      worker.onmessage = pingHealth;
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // ignore if worker restricted
+    }
+
+    // Hold Web Lock while VMs run so Chrome Memory Saver avoids discarding the tab
+    let releaseLock: (() => void) | null = null;
+    const navLocks = (navigator as Navigator & {
+      locks?: { request: (name: string, cb: () => Promise<void>) => Promise<void> };
+    }).locks;
+    if (keepAwakeEnabled && navLocks) {
+      navLocks
+        .request(
+          'javadeck_vm_keep_alive',
+          () =>
+            new Promise<void>((resolve) => {
+              releaseLock = resolve;
+            })
+        )
+        .catch(() => {});
+    }
+
+    // Screen Wake Lock when tab is visible and keep-awake is enabled
+    let wakeSentinel: { release: () => Promise<void> } | null = null;
+    const requestWake = async () => {
+      if (!keepAwakeEnabled || document.visibilityState !== 'visible') return;
+      try {
+        const wl = (navigator as Navigator & {
+          wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+        }).wakeLock;
+        if (wl && !wakeSentinel) {
+          wakeSentinel = await wl.request('screen');
+        }
+      } catch {
+        // ignore if unsupported or battery saver blocks WakeLock
+      }
+    };
+    requestWake();
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        pingHealth();
+        wakeSentinel = null;
+        requestWake();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Ultra-quiet AudioContext keepalive (0.00001 gain) to prevent browser tab freezing when Keep-Awake is on
+    let audioCtx: AudioContext | null = null;
+    const resumeAudio = () => {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+    };
+    if (keepAwakeEnabled && typeof AudioContext !== 'undefined') {
+      try {
+        audioCtx = new AudioContext();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.00001;
+        osc.frequency.value = 30;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        resumeAudio();
+        window.addEventListener('pointerdown', resumeAudio, { passive: true });
+        window.addEventListener('keydown', resumeAudio, { passive: true });
+      } catch {
+        audioCtx = null;
+      }
+    }
+
+    return () => {
+      clearInterval(httpTimer);
+      worker?.terminate();
+      releaseLock?.();
+      wakeSentinel?.release().catch(() => {});
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pointerdown', resumeAudio);
+      window.removeEventListener('keydown', resumeAudio);
+      audioCtx?.close().catch(() => {});
+    };
+  }, [appMode, runningCount, keepAwakeEnabled]);
+
   if (appMode === 'menu') {
     return <ModeSelector onSelectMode={setAppMode} />;
   }
@@ -285,6 +427,8 @@ export default function App() {
               vms={vms}
               jarsById={jarsById}
               vmStatuses={vmStatuses}
+              keepAwakeEnabled={keepAwakeEnabled}
+              onToggleKeepAwake={() => setKeepAwakeEnabled((v) => !v)}
               onOpenVm={handleOpenVm}
               onToggleVmRunning={handleToggleVmRunning}
               onDeleteVm={handleDeleteVm}

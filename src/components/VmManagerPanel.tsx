@@ -7,6 +7,7 @@ import {
   Plus,
   Power,
   Settings,
+  ShieldCheck,
   Smartphone,
   Square,
   Trash2,
@@ -17,6 +18,8 @@ interface VmManagerPanelProps {
   vms: PersistedVmConfig[];
   jarsById: Map<string, UploadedJarRecord>;
   vmStatuses: Record<string, VmStatusSummary>;
+  keepAwakeEnabled: boolean;
+  onToggleKeepAwake: () => void;
   onOpenVm: (vmId: string, openSettings?: boolean) => void;
   onToggleVmRunning: (vmId: string) => void;
   onDeleteVm: (vmId: string) => void;
@@ -28,6 +31,8 @@ export const VmManagerPanel: React.FC<VmManagerPanelProps> = ({
   vms,
   jarsById,
   vmStatuses,
+  keepAwakeEnabled,
+  onToggleKeepAwake,
   onOpenVm,
   onToggleVmRunning,
   onDeleteVm,
@@ -95,13 +100,26 @@ export const VmManagerPanel: React.FC<VmManagerPanelProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-4 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           <div className="text-right">
             <p className="text-[11px] uppercase tracking-wider text-slate-500">Đang hoạt động</p>
             <p className="font-mono-tabular text-base font-semibold text-slate-100">
               {runningCount} / {vms.length} máy
             </p>
           </div>
+          <button
+            type="button"
+            onClick={onToggleKeepAwake}
+            title="Giữ kết nối máy chủ, bật WakeLock & chống trình duyệt đóng băng tab sau 30 phút"
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
+              keepAwakeEnabled
+                ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                : 'border-white/12 bg-[#1A1F29] text-slate-300 hover:bg-[#232937]'
+            }`}
+          >
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            <span>{keepAwakeEnabled ? 'Chống ngủ tab: BẬT' : 'Chống ngủ tab: TẮT'}</span>
+          </button>
           <button
             type="button"
             onClick={onAddVmClick}

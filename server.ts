@@ -351,6 +351,37 @@ async function startServer() {
     }
   });
 
+  const attachHeartbeat = (targetWss: WebSocketServer) => {
+    targetWss.on('connection', (ws: WebSocket & { isAlive?: boolean }) => {
+      ws.isAlive = true;
+      ws.on('pong', () => {
+        ws.isAlive = true;
+      });
+    });
+
+    const interval = setInterval(() => {
+      for (const client of targetWss.clients) {
+        const tracked = client as WebSocket & { isAlive?: boolean };
+        if (tracked.isAlive === false) {
+          tracked.terminate();
+          continue;
+        }
+        tracked.isAlive = false;
+        if (tracked.readyState === WebSocket.OPEN) {
+          tracked.ping();
+        }
+      }
+    }, 25_000);
+
+    targetWss.on('close', () => clearInterval(interval));
+  };
+
+  attachHeartbeat(wss);
+  attachHeartbeat(relayWss);
+
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
